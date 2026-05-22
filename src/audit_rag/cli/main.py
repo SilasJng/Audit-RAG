@@ -16,6 +16,7 @@ from audit_rag.quality.data_quality import validate_normalized_data
 from audit_rag.retrieval.issue_triage import triage_issue
 from audit_rag.retrieval.query_context import QueryContext
 from audit_rag.services.output_formatter import to_pretty_json
+from audit_rag.wiki.exporter import export_wiki
 
 app = typer.Typer(help="audit-rag CLI")
 
@@ -253,6 +254,14 @@ def promote_provisional_cmd(
 ) -> None:
     """Promote curated provisional records to normalized data after final outcome review."""
     print(to_pretty_json(promote_provisional(contest_slug, confirmed=confirmed)))
+
+
+@app.command("export-wiki")
+def export_wiki_cmd(
+    wiki_dir: str = typer.Option("wiki", help="Wiki directory relative to repo root."),
+) -> None:
+    """Export normalized JSON records into read-only Markdown pages under wiki/generated/."""
+    print(to_pretty_json(export_wiki(wiki_dir=wiki_dir).to_dict()))
 
 
 @app.command("validate-data")
