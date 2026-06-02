@@ -1,0 +1,22 @@
+{
+  "id": "operator-only-yield-misreport-without-broken-gate-fp-01",
+  "issue_claim": "operator can declare too much yield or choose a bad settlement amount",
+  "why_it_looked_bad": "yield settlement paths often move value, so a wrong proposed yield appears to create phantom surplus or drain reserves",
+  "why_not_valid": "if the only failure is a trusted Operator intentionally or negligently passing bad parameters, and the contract's on-chain backing/surplus gates correctly reject states without real net backing, the issue is a trusted-role or parameter-risk claim rather than a standalone Medium/High bug",
+  "classification": "trusted-role-or-configuration-risk",
+  "downgrade_reason": "requires malicious/inactive/mistaken trusted Operator behavior without a contract-side invariant failure in the safety gate",
+  "trust_assumption": "Operator or keeper is trusted or explicitly bounded by public-known contest assumptions; the relevant security property is whether contract gates independently validate net backing",
+  "when_it_could_be_real": [
+    "the on-chain gate omits an asset/liability field and therefore accepts a bad settlement during normal operation",
+    "untrusted users can manipulate the gate input or trigger settlement against stale/gross-only accounting",
+    "the protocol documentation promises contract-enforced backing bounds that are bypassed by adapter accounting"
+  ],
+  "source_url": "https://code4rena.com/reports/2026-04-monetrix",
+  "tags": [
+    "trusted-operator",
+    "settlement-gate",
+    "yield-accounting",
+    "false-positive",
+    "external-accounting"
+  ]
+}

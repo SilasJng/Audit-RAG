@@ -1,0 +1,104 @@
+{
+  "source_type": "code4rena-report",
+  "source_name": "Code4rena Monetrix Findings and Analysis Report (2026-04)",
+  "source_url": "https://code4rena.com/reports/2026-04-monetrix",
+  "protocol_name": "Monetrix",
+  "project_repo": "https://github.com/MonetrixLab/monetrix-contracts",
+  "language": "solidity",
+  "severity": "medium",
+  "validation_status": "confirmed-by-sponsor",
+  "validation_style": [
+    "public-contest-finding",
+    "report-included-code-links",
+    "coded-poc-in-final-report"
+  ],
+  "id": "c4-2026-04-monetrix-m-01",
+  "component_types": [
+    "vault-accounting",
+    "external-strategy-accounting",
+    "precompile-reader",
+    "settlement-gate",
+    "yield-distribution"
+  ],
+  "finding_title": "PM borrow liabilities are omitted from backing, allowing phantom surplus settlement",
+  "summary": "Monetrix credited Portfolio Margin supplied balances from the HyperCore 0x811 precompile as positive backing but did not subtract borrow liabilities from the same PM/Borrow-Lend state. The resulting totalBackingSigned(), surplus(), and distributableSurplus() could be overstated, allowing normal settlement to distribute phantom yield even when true PM net equity was negative.",
+  "root_cause": "external PM/Borrow-Lend account valuation used gross supplied assets as backing while ignoring sibling borrow liability fields, so settlement safety gates consumed gross collateral instead of net external equity",
+  "broken_invariants": [
+    "external strategy or PM account backing must be measured as net equity, not gross supplied assets only",
+    "every liability field in an upstream account state that can reduce claimable backing must be subtracted before surplus gates authorize yield",
+    "settlement gates must not distribute yield when a positive supplied balance is offset by larger borrow debt in the same external account"
+  ],
+  "attack_preconditions": [
+    "the vault or configured L1 account has registered PM/Borrow-Lend supplied slots that feed totalBackingSigned()",
+    "the external PM account can carry borrow liabilities while still reporting supplied balances",
+    "settlement is initialized and a normal settle() call evaluates distributableSurplus() from the supply-only PM reader"
+  ],
+  "attacker_capability": "ordinary yield recipient or protocol participant can benefit from phantom yield once normal settlement accepts overstated backing; the core bug is the contract-side safety gate omitting liabilities, not malicious Operator parameter selection",
+  "trigger_actions": [
+    "enter or observe a PM state with supplied assets and borrow liabilities",
+    "call or wait for normal settlement that computes totalBackingSigned() from suppliedBalance()",
+    "distribute accepted yield through the vault's yield path"
+  ],
+  "impact": {
+    "type": "bounded-value-leakage-and-undercollateralization",
+    "description": "Phantom distributable surplus can mint USDM into sUSDM and route USDC to configured recipients while true PM liabilities exceed real backing. The final report classified the issue as Medium because the damage is bounded by settlement cadence and APR caps but the safety gate can accept false surplus."
+  },
+  "why_not_higher": "final C4 severity is Medium; the exploit depends on PM borrow state and accepted settlement windows, and per-window yield is bounded by annualized APR and protocol configuration",
+  "why_not_lower": "the finding is included in the final C4 report as the only Medium; it affects value-moving settlement gates and can convert external-accounting overstatement into real yield distribution",
+  "common_false_positive_angles": [
+    "do not treat this as mere Operator misreporting if on-chain gates are supposed to independently bound settlement by backing",
+    "verify the upstream reader really exposes liability fields or net-equity data; if the queried API/precompile is supply-only by design and another reader subtracts debt, the pattern may not apply",
+    "confirm the credited external balance feeds a value-moving gate, not only an informational UI metric"
+  ],
+  "mitigations": [
+    "Decode and account for both PM supply and PM borrow state. Replace supply-only readers with a full PM state reader or a reliable net-equity source, and subtract borrow liabilities in the same units and valuation framework before computing totalBackingSigned(), surplus(), or distributableSurplus()."
+  ],
+  "snippets": [
+    {
+      "role": "affected-code",
+      "code": "https://github.com/MonetrixLab/monetrix-contracts/blob/f283eda26272b085de8ece7f8dcee7ffce59b28b/src/core/PrecompileReader.sol#L84-L91",
+      "note": "suppliedBalance decodes only the supplied field from the 0x811 response"
+    },
+    {
+      "role": "affected-code",
+      "code": "https://github.com/MonetrixLab/monetrix-contracts/blob/f283eda26272b085de8ece7f8dcee7ffce59b28b/src/core/PrecompileReader.sol#L133-L136",
+      "note": "suppliedUsdcEvm inherits the supply-only PM blind spot"
+    },
+    {
+      "role": "affected-code",
+      "code": "https://github.com/MonetrixLab/monetrix-contracts/blob/f283eda26272b085de8ece7f8dcee7ffce59b28b/src/core/PrecompileReader.sol#L152-L162",
+      "note": "suppliedNotionalUsdcFromPerp values supplied non-USDC balances without borrow offset"
+    },
+    {
+      "role": "affected-code",
+      "code": "https://github.com/MonetrixLab/monetrix-contracts/blob/f283eda26272b085de8ece7f8dcee7ffce59b28b/src/core/MonetrixAccountant.sol#L146-L157",
+      "note": "_readL1Backing adds PM supplied values as positive backing"
+    },
+    {
+      "role": "affected-code",
+      "code": "https://github.com/MonetrixLab/monetrix-contracts/blob/f283eda26272b085de8ece7f8dcee7ffce59b28b/src/core/MonetrixAccountant.sol#L180-L192",
+      "note": "surplus and distributableSurplus consume inflated totalBackingSigned"
+    },
+    {
+      "role": "affected-code",
+      "code": "https://github.com/MonetrixLab/monetrix-contracts/blob/f283eda26272b085de8ece7f8dcee7ffce59b28b/src/core/MonetrixAccountant.sol#L212-L221",
+      "note": "settleDailyPnL Gate 3 accepts distributableSurplus before phantom yield can be settled"
+    },
+    {
+      "role": "finding-reference",
+      "code": "https://code4rena.com/reports/2026-04-monetrix#m-01-pm-borrow-liabilities-are-omitted-from-backing-allowing-phantom-surplus-settlement",
+      "note": "final Code4rena report finding section"
+    }
+  ],
+  "tags": [
+    "external-accounting",
+    "net-equity",
+    "borrow-liability",
+    "precompile-reader",
+    "settlement-gate",
+    "yield-accounting",
+    "vault-accounting",
+    "solidity",
+    "evm"
+  ]
+}

@@ -1,0 +1,36 @@
+{
+  "id": "external-account-net-equity-validation-recipe",
+  "pattern_id": "external-account-gross-supply-without-borrow-liability-pattern",
+  "test_style": "external-account-state-mock",
+  "goal": "Prove that a vault/accountant/connector uses net external equity for backing, surplus, solvency, or yield gates rather than gross supplied/collateral balances.",
+  "setup_requirements": [
+    "test harness can mock or simulate the external precompile/API/account reader",
+    "downstream gate such as totalBackingSigned, surplus, totalAssets, collateral ratio, settle, mint, withdraw, or liquidation is reachable",
+    "unit conversion helpers for asset and liability fields are visible or controllable"
+  ],
+  "minimal_state": [
+    "local protocol has nonzero liabilities or token supply that requires external backing",
+    "external account reports a positive supplied/collateral field",
+    "the same external account reports borrow/debt/liability greater than or equal to the supplied/collateral value",
+    "a value-moving gate consumes the adapter/accountant output"
+  ],
+  "attacker_actions": [
+    "seed or mock supplied/collateral balance as positive",
+    "seed or mock borrow/debt liability larger than supplied balance",
+    "call the local view that computes backing/surplus/solvency and compare gross-only result to expected net equity",
+    "call the downstream settlement/mint/withdraw/liquidation path and verify whether the gate incorrectly passes"
+  ],
+  "assertions": [
+    "net-equity-aware backing is supplied_value - borrow_liability after matching units and prices",
+    "surplus/distributable/solvency is non-positive when borrow liabilities exceed supplied assets",
+    "the downstream value-moving gate reverts or refuses distribution under net-negative external state",
+    "a vulnerable implementation reports positive backing or accepts settlement from the same state"
+  ],
+  "common_failures": [
+    "mocking only the asset-side field and never modeling the sibling borrow/debt field",
+    "proving a bad Operator parameter instead of the contract gate accepting an omitted-liability state",
+    "mixing L1/L2 or token decimal domains so the debt subtraction comparison is meaningless",
+    "stopping at a view mismatch without driving a value-moving gate or protocol-function impact"
+  ],
+  "notes": "Added after Monetrix M-01. Use this recipe whenever an external PM/lending/strategy account contributes to total backing, TVL, surplus, or solvency."
+}

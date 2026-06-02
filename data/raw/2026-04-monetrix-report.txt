@@ -1,0 +1,297 @@
+                                 Code4rena | Keeping high severity bugs out of production                 Monetrix        
+    Skip Navigation       
+  For Projects        Ready to secure your project?
+ The best time to start is now.
+    Get started
+   Security solutions      Competitive audit
+ We invented the format that disrupted the web3 industry. Find out why top protocols trust C4.
+    Zenith
+ Zenith assembles auditors with proven track records to secure your project.
+  Resources     Docs
+   Reports
+  For Wardens        Find bugs. Get paid.
+ Put your security research skills to work.
+    Become a Warden
+   Audits     Ongoing audits
+   Upcoming audits
+   Past audits
+   Bounties
+  Leaderboard     Past 90 days
+   Past 365 days
+   All time
+  Resources     Reports
+   Help desk
+   Docs
+   GitHub
+  Support 
+  Log in 
+  Login
+  Log in / Register 
+   Get an audit
+  Monetrix  
+ Findings & Analysis Report
+ 2026-05-26
+  Table of contents
+  Overview 
+  About C4 
+  Summary 
+  Scope 
+  Severity Criteria 
+  Medium Risk Findings (1) 
+  [M-01] PM borrow liabilities are omitted from backing, allowing phantom surplus settlement 
+  Low Risk and Informational Issues 
+  QA Report 
+  Disclosures 
+     Overview
+    About C4
+ Code4rena (C4) is a competitive audit platform where security researchers, referred to as Wardens, review, audit, and analyze codebases for security vulnerabilities in exchange for bounties provided by sponsoring projects.
+ During the audit outlined in this document, C4 conducted an analysis of the Monetrix smart contract system. The audit took place from April 24 to May 04, 2026.
+ Final report assembled by Code4rena.
+    Summary
+ The C4 analysis yielded an aggregated total of 1 unique vulnerabilities. Of these vulnerabilities, 0 received a risk rating in the category of HIGH severity and 1 received a risk rating in the category of MEDIUM severity.
+ Additionally, C4 analysis included 95 QA reports compiling issues with a risk rating of LOW severity or informational. 
+ All of the issues presented here are linked back to their original finding, which may include relevant context from the judge and Monetrix team.
+    Scope
+ The code under review can be found within the  C4 Monetrix repository , and is composed of 20 smart contracts written in the Solidity programming language and includes 1726 lines of Solidity code.
+ The code in C4’s Monetrix repository was pulled from:
+ Repository:  https://github.com/MonetrixLab/monetrix-contracts 
+ Commit hash:  f283eda26272b085de8ece7f8dcee7ffce59b28b 
+    Severity Criteria
+ C4 assesses the severity of disclosed vulnerabilities based on three primary risk categories: high, medium, and low/informational.
+ High-level considerations for vulnerabilities span the following key areas when conducting assessments:
+ Malicious Input Handling
+ Escalation of privileges
+ Arithmetic
+ Gas use
+ For more information regarding the severity criteria referenced throughout the submission review process, please refer to the documentation provided on  the C4 website , specifically our section on  Severity Categorization .
+    Medium Risk Findings (1)
+     [M-01] PM borrow liabilities are omitted from backing, allowing phantom surplus settlement 
+  Submitted by  0xastronatey , also found by  0x04 ,  ABAIKUNANBAEV ,  aestheticbhai ,  ahmad044 ,  botdidy ,  bunnyhunter ,  cgdusek ,  ChainSentry ,  cheng9061 ,  ciphermalware ,  CircuitBreaker ,  Diavolo ,  Drothon ,  edoscoba ,  fuddle_yichi ,  gwumex ,  harry ,  HUNTERRRRRRR ,  I1iveF0rTh1Sh1t ,  Jing ,  KuwaTakushi ,  legat ,  Link1337 ,  Luc1jan ,  lufP ,  n0rv ,  niffylord ,  oreztker ,  qed ,  rajatbeladiya ,  Riceee ,  sgtpepper ,  unineko ,  WhiteKnightK ,  winor30 , and  ZakMHTX  
+   src/core/PrecompileReader.sol#L84-L91  
+   src/core/PrecompileReader.sol#L133-L136  
+   src/core/PrecompileReader.sol#L152-L162  
+   src/core/MonetrixAccountant.sol#L146-L157  
+   src/core/MonetrixAccountant.sol#L180-L192  
+    Summary
+  MonetrixAccountant._readL1Backing()  adds Portfolio Margin / Borrow-Lend supplied balances to backing via  PrecompileReader.suppliedBalance() , but the 0x811 precompile response encodes both borrow liabilities and supply assets, and the reader only decodes the supply side. Hyperliquid’s Portfolio Margin docs describe automatic borrowing when an account has insufficient balance, with borrowed assets accruing interest, and the official API schema exposes both  borrow  and  supply  under  tokenToState  (See  Portfolio Margin | Hyperliquid Docs ). Monetrix only decodes and credits the supplied value.
+ As a result,  totalBackingSigned()  can report a positive surplus while the PM account is net underwater after borrow debt. A normal  settle()  can then pass Gate 3 and distribute phantom yield, minting USDM into sUSDM and routing USDC to insurance/foundation while real liabilities exceed real backing. This is distinct from the V12 stale-YieldEscrow and late-staker findings because the accounting error exists at live settlement time, before yield is moved to  YieldEscrow .
+    Root Cause
+  1)  suppliedBalance()  decodes only the supply field from the 0x811 PM state, discarding borrow liabilities 
+ Hyperliquid PM/Borrow-Lend state encodes both borrow and supply fields in the 0x811 response, but  PrecompileReader.suppliedBalance()  destructures only the fourth  uint64  as  supplied  and silently drops the borrow basis and borrow value fields.
+   src/core/PrecompileReader.sol#L84-L91  
+     /// @notice PM "supplied" balance (0x811). Returned in L1 8-dp wei.   
+   function     suppliedBalance  (  address     account  ,   uint64     token  )   internal     view     returns   (  uint64     supplied  ) {   
+       (  bool     ok  ,   bytes     memory     res  ) =   HyperCoreConstants  .  PRECOMPILE_SUPPLIED_BALANCE  .  staticcall  (   
+             abi  .  encode  (  account  ,   token  )   
+       );   
+         require  (  ok   &&   res  .  length   >=   128  ,   "PrecompileReader: supplied balance read failed"  );   
+       (,,,   supplied  ) =   abi  .  decode  (  res  , (  uint64  ,   uint64  ,   uint64  ,   uint64  ));   
+         // ^-- BUG: decodes only supply.value (4th field) and drops borrow.basis / borrow.value from the same PM state   
+   }    
+  2) Both  suppliedUsdcEvm()  and  suppliedNotionalUsdcFromPerp()  inherit the supply-only blind spot 
+ The USDC convenience wrapper calls  suppliedBalance()  and converts to EVM 6dp. The non-USDC hedge wrapper does the same and values via perp oracle. Neither function has access to borrow state because  suppliedBalance()  already discarded it.
+   src/core/PrecompileReader.sol#L133-L136  
+     function     suppliedUsdcEvm  (  address     account  )   internal     view     returns   (  uint256  ) {   
+         uint64     supplied   =   suppliedBalance  (  account  ,   uint64  (  HyperCoreConstants  .  USDC_TOKEN_INDEX  ));   
+         return     TokenMath  .  usdcL1WeiToEvm  (  supplied  );   
+   }    
+   src/core/PrecompileReader.sol#L152-L162  
+     /// @notice PM-supplied hedge balance valued in 6-dp USDC.   
+   function     suppliedNotionalUsdcFromPerp  (   
+         uint32     spotTokenIndex  ,   
+         uint32     perpIndex  ,   
+         address     account   
+   )   internal     view     returns   (  uint256  ) {   
+         uint64     supplied   =   suppliedBalance  (  account  ,   uint64  (  spotTokenIndex  ));   
+         if   (  supplied   ==   0  )   return     0  ;   
+         uint64     price   =   oraclePx  (  perpIndex  );   
+       (  uint8     weiDec  ,   uint8     szDec  ) =   _assetDecimals  (  spotTokenIndex  ,   perpIndex  );   
+         return     TokenMath  .  spotNotionalUsdcFromPerpPx  (  supplied  ,   price  ,   weiDec  ,   szDec  );   
+   }    
+  3)  _readL1Backing()  credits PM-supplied balances as positive backing without subtracting PM borrow liabilities 
+ The supplied-asset loop adds each registered PM slot’s supply value as backing. There is no corresponding borrow subtraction anywhere in  _readL1Backing() , even though the same PM state can carry borrow debt that reduces the account’s net equity.
+   src/core/MonetrixAccountant.sol#L146-L157  
+     // Supplied (0x811) — iterate only registered slots; strict reads.   
+   uint256     slen   =   suppliedList  .  length  ;   
+   for   (  uint256     i   =   0  ;   i   <   slen  ;   i  ++) {   
+         SuppliedAsset     storage     a   =   suppliedList  [  i  ];   
+         if   (  a  .  spotToken   ==   uint64  (  HyperCoreConstants  .  USDC_TOKEN_INDEX  )) {   
+             total   +=   int256  (  PrecompileReader  .  suppliedUsdcEvm  (  account  ));   
+             //     ^-- BUG: credits PM-supplied USDC but never subtracts PM-borrowed USDC   
+       }   else   {   
+             total   +=   int256  (   
+                 PrecompileReader  .  suppliedNotionalUsdcFromPerp  (  uint32  (  a  .  spotToken  ),   a  .  perpIndex  ,   account  )   
+           );   
+             // ^-- BUG: credits PM-supplied non-USDC collateral but never subtracts PM borrow liabilities   
+       }   
+   }    
+  4) Inflated backing feeds  surplus()  and  distributableSurplus() , letting Gate 3 pass on phantom surplus 
+ The inflated  totalBackingSigned()  directly feeds  surplus() , which subtracts  USDM.totalSupply()  to determine the protocol’s free surplus.  distributableSurplus()  further subtracts redemption shortfall. Gate 3 requires  distributableSurplus() > 0  and  proposedYield <= distributable . When PM borrow debt is omitted from backing, the surplus is overstated and Gate 3 allows settlement against phantom backing.
+   src/core/MonetrixAccountant.sol#L180-L192  
+     function     surplus  ()   public     view     returns   (  int256  ) {   
+         return     totalBackingSigned  () -   int256  (  usdm  .  totalSupply  ());   
+         //     ^-- inflated when PM borrow debt is omitted from totalBackingSigned()   
+   }   
+   /// @notice Yield-declarable surplus. Subtracts pending redemption shortfall   
+   ///         from `surplus()` so `usdm.burn` at request time cannot inflate a   
+   ///         phantom-yield window before `claimRedeem` drains the USDC.   
+   function     distributableSurplus  ()   public     view     returns   (  int256  ) {   
+         int256     s   =   surplus  ();   
+         address     re   =   IMonetrixVaultReader  (  vault  ).  redeemEscrow  ();   
+         uint256     sf   =   re   ==   address  (  0  ) ?   0   :   IRedeemEscrow  (  re  ).  shortfall  ();   
+         return     s   -   int256  (  sf  );   
+         //     ^-- Gate 3 inherits the inflated supply-only PM backing   
+   }    
+   src/core/MonetrixAccountant.sol#L212-L221  
+     // Gate 3 — Distributable surplus bound (F1 fix: redeem-window safe)   
+   int256     ds   =   distributableSurplus  ();   
+   require  (  ds   >   0  ,   "Accountant: no distributable surplus"  );   
+   distributable   =   uint256  (  ds  );   
+   require  (  proposedYield   <=   distributable  ,   "Accountant: exceeds distributable"  );   
+   // Gate 4 — Annualized APR bound (F8 fix: typo + phantom rate limit)   
+   uint256     elapsed   =   block  .  timestamp   -   lastSettlementTime  ;   
+   uint256     cap   = (  usdm  .  totalSupply  () *   IMonetrixConfigReader  (  config  ).  maxAnnualYieldBps  () *   elapsed  )   
+       / (  10_000   *   365     days  );   
+   require  (  proposedYield   <=   cap  ,   "Accountant: exceeds annualized cap"  );   
+   // ^-- passes against asset-only PM backing even when net PM debt makes true surplus negative    
+  5) Phantom settlement converts into real value extraction via  distributeYield()  
+ Once settlement passes,  distributeYield()  converts the false settlement into actual protocol value movement: the user yield share is minted as USDM and injected into sUSDM, while insurance and foundation shares are paid in USDC.
+   src/core/MonetrixVault.sol#L395-L399  
+     if   (  userShare   >   0  ) {   
+         usdm  .  mint  (  address  (  this  ),   userShare  );   
+         // ^-- phantom settlement becomes newly minted USDM yield for sUSDM holders   
+         IERC20  (  address  (  usdm  )).  forceApprove  (  address  (  susdm  ),   userShare  );   
+         susdm  .  injectYield  (  userShare  );   
+   }    
+    Internal Pre-conditions
+ The Vault has a registered 0x811 PM/Borrow-Lend supplied slot via normal BLP/PM strategy flows ( vault.supplyToBlp() ).
+ The Vault’s PM state has a nonzero borrow liability. Hyperliquid documents automatic borrowing in PM when balance is insufficient, and the API exposes borrow and supply state per token ( Portfolio Margin | Hyperliquid Docs ).
+ The Vault has enough EVM USDC to satisfy  MonetrixVault.settle() ’s local liquidity check after redemption shortfall.
+ Settlement is initialized and at least  minSettlementInterval  (default 20 hours,   MonetrixConfig.sol#L84  ) has elapsed.
+  sUSDM.totalSupply() > 0 , so user yield is injected instead of rerouted to foundation.
+    External Pre-conditions
+ HyperCore PM borrow state must exist for the Vault account. This is realistic because PM explicitly supports automatic borrowing and borrow-interest accrual, and Hyperliquid’s API schema models per-token  borrow  and  supply  values (See  Portfolio Margin | Hyperliquid Docs ).
+    Attack Path
+ The attacker becomes an ordinary sUSDM holder through permissionless  MonetrixVault.deposit()  (  MonetrixVault.sol#L169-L180  ) and  sUSDM.deposit() .
+ The Vault’s normal HyperCore strategy enters or drifts into a PM borrow state. Hyperliquid PM automatically borrows USDC when an account has insufficient balance ( Portfolio Margin | Hyperliquid Docs ).
+  MonetrixAccountant.totalBackingSigned()  reads the 0x811 PM state through  PrecompileReader.suppliedBalance()  (  PrecompileReader.sol#L84-L91  ) but only credits  supply.value ; it does not subtract  borrow.value .
+  MonetrixVault.settle(proposedYield)  calls  settleDailyPnL() . Gate 3 checks  proposedYield <= distributableSurplus()  (  MonetrixAccountant.sol#L212-L216  ), but  distributableSurplus()  is inflated because PM borrow liabilities were omitted.
+  MonetrixVault.distributeYield()  pulls the settled USDC, mints  userShare  USDM, and injects it into sUSDM (  MonetrixVault.sol#L395-L399  ). Existing sUSDM holders, including the attacker, receive a higher exchange rate even though the system was not truly in surplus.
+ The attacker cools down sUSDM via  cooldownShares()  (  sUSDM.sol#L160-L172  ), claims USDM after the 3-day unstake cooldown (  MonetrixConfig.sol#L86  ), and redeems the excess USDM for USDC through the normal redemption path.
+    Impact
+  Impact:  High - a PM borrow liability can make the protocol economically undercollateralized while the on-chain Gate 3 still sees distributable surplus. Each accepted phantom settlement mints USDM to sUSDM holders and routes real USDC to insurance/foundation, draining reserves against liabilities.
+ With the default parameters (  MonetrixConfig.sol#L83  :  maxTVL = 10_000_000e6 ,   MonetrixConfig.sol#L88  :  maxAnnualYieldBps = 1200 ), the APR cap allows roughly:
+    10,000,000 USDM × 12% APR × 21 hours / 365 days ≈ 2,876 USDM per settlement window   
+ At the default 70% user yield split (  MonetrixConfig.sol#L79  :  userYieldBps = 7000 ), about 2,013 USDM per 21-hour window can be injected into sUSDM from false surplus, plus 30% of the same phantom settlement can be paid out in USDC to insurance/foundation.
+  Likelihood:  Medium — it requires the Vault’s PM account to have borrow debt while settlement proceeds, but PM automatic borrowing is a documented normal feature, not an exotic failure mode (See  Portfolio Margin | Hyperliquid Docs ).
+    Negative Check
+  Gate 3 does not prevent this  because it trusts  totalBackingSigned() , and that value is asset-only for PM supplied state — borrow liabilities are never subtracted.
+  Gate 4 does not prevent this  because it caps the rate of phantom yield but does not verify net PM liabilities. It limits the per-window damage but still allows false yield to pass.
+  Reentrancy protection does not apply  because the exploit is an accounting omission, not a reentrant call path.
+  This is not V12 F-50540  (no stale-rate late staking),  not V12 F-50541  (no mutable YieldEscrow / stale post-settlement distribution),  not V12 F-50542  (no redemption double-deduction), and  not V12 F-50474  (no Governor-set multisig backing). Distinct root cause: live settlement overstatement caused by ignoring PM borrow liabilities in  suppliedBalance() .
+    Mitigation
+ Decode and account for both PM supply and PM borrow state. Replace  suppliedBalance()  with a reader that returns all 0x811 fields, then subtract borrow liabilities from  totalBackingSigned()  in the same units and valuation framework used for supplied assets. For USDC, subtract borrowed USDC 8dp converted to EVM 6dp. For non-USDC borrowable assets, subtract borrowed notional using the appropriate oracle and token metadata.
+ A safer design is to compute a complete net PM equity value from HyperCore if a reliable precompile/API field exists, rather than reconstructing only the asset side from individual token slots.
+    Proof of Concept
+  View detailed Proof of Concept 
+    Comments
+  The judge and sponsor team commented on this issue, with the sponsor team claiming it has been fixed. 
+    Low Risk and Informational Issues
+ For this audit, 95 QA reports were submitted by wardens compiling low risk and informational issues. The  QA report highlighted below  by  ABAIKUNANBAEV  received the top score from the judge. 4 valid Low-severity findings were also submitted individually, and can be viewed  here .
+  The following wardens also submitted QA reports:  0x_bob_0x ,  0x4non ,  0x5ul3x ,  0xAlix2 ,  0xcode ,  0xGutzzz ,  0xIconart ,  0xiehnnkta ,  0xki ,  0xMehediSec ,  0xscater ,  2997ms ,  7Tecra7 ,  aestheticbhai ,  AgengDev ,  ah_mo ,  akhilmanga ,  allan31 ,  AriF9212 ,  Athenea ,  Auditor_Nate ,  Bale ,  basekay ,  befree3x ,  Bigsam ,  binbin2803 ,  blackgrease ,  BlockSentry ,  Bobai23 ,  brian ,  Cecuro ,  ChargingFoxSec ,  ChaseTheLight ,  cheng9061 ,  chuenlye ,  DemoreX ,  Dewaxindo ,  Dieworu ,  dobrevaleri ,  drMurlly ,  Drothon ,  dude610 ,  edstaro ,  Eldunar ,  gesha17 ,  gizzy ,  gwumex ,  haoyao159123 ,  hjo ,  InAllHonesty ,  jayx ,  Jeremias ,  Jesse639 ,  jo13 ,  juti ,  K42 ,  keterka ,  King_ ,  Kris_RenZo ,  KuwaTakushi ,  legat ,  legendweb3 ,  LeoGold ,  lougarou ,  Luc1jan ,  M4v3r1ck ,  Max2557 ,  Messiah ,  mightyraj2605 ,  natachi ,  Orhukl ,  oxp_tr125 ,  Pelz ,  piki ,  pwvux ,  qed ,  rayss ,  Razkky ,  ret2basic ,  Riceee ,  Rikka ,  rokinot ,  Rorschach ,  SarveshLimaye ,  sexretxt ,  ShadowKinetics ,  The_unhackers ,  vesko210 ,  Vinay ,  xiao ,  y4y ,  Yellow-Wolf ,  yonko , and  zed999 . 
+    QA Report
+    Summary
+ ID 
+ Title 
+ L‑01 
+ CoreWriter paths do not check that the Vault account already exists on HyperCore 
+ L‑02 
+ Limit-order TIF is not validated before CoreWriter submission 
+ L‑03 
+  deposit  is allowed before the Vault is fully wired 
+ L‑04 
+ Token notional math can revert on extreme metadata exponents 
+ L‑05 
+  emergencyRawAction  lacks basic action metadata validation / observability 
+ L‑06 
+  setMultisigVaultEnabled  emits no event 
+ L‑07 
+  sUSDM.setConfig  emits no event 
+    L-01: CoreWriter paths do not check that the Vault account already exists on HyperCore
+  Instances : 7
+ The following functions can emit CoreWriter actions without checking that the Vault’s HyperCore account was already initialized before the EVM block:
+  executeHedge() 
+  depositToHLP() 
+  withdrawFromHLP() 
+  supplyToBlp() 
+  withdrawFromBlp() 
+  bridgePrincipalFromL1() 
+  bridgeYieldFromL1() 
+  Impact : First-time CoreWriter actions can be rejected or not processed if the HyperCore account was only initialized through an EVM-to-Core transfer in the same block.
+  Recommendation : Add an explicit account-existence/readiness check before CoreWriter paths, or require a one-block initialization delay after the first bridge.
+    L-02: Limit-order TIF is not validated before CoreWriter submission
+  Instances : 1
+ TIF is passed raw:
+     // src/core/ActionEncoder.sol   
+   uint8     tif  ;    
+ and forwarded without checking  1 <= tif <= 3 .
+  Impact : Invalid TIF values can produce rejected or undefined HyperCore actions.
+  Recommendation : Validate in  _sendLimitOrder  or in Vault entry points:
+     require  (  tif   >=   1   &&   tif   <=   3  ,   "invalid tif"  );    
+    L-03:  deposit  is allowed before the Vault is fully wired
+  Instances : 1
+  deposit  does not use  requireWired .
+     // src/core/MonetrixVault.sol   
+   function     deposit  (  uint256     amount  )   external     nonReentrant     whenNotPaused    
+  Impact : USDM can be minted before  accountant ,  redeemEscrow , and  yieldEscrow  are configured. Users cannot redeem through the normal path until wiring is completed.
+  Recommendation : Consider adding  requireWired  to  deposit , or document that deposits must remain paused until wiring is complete.
+    L-04: Token notional math can revert on extreme metadata exponents
+  Instances : 1
+ The notional conversion uses exponentiation:
+     // src/core/TokenMath.sol   
+   uint256     divisor   =   10   **   uint256  (  weiDecimals   -   perpSzDecimals  );    
+ It checks  weiDecimals >= perpSzDecimals , but does not cap the exponent.
+  Impact : Bad or unexpected token metadata can make backing reads revert due to arithmetic overflow.
+  Recommendation : Add a maximum exponent guard, for example:
+     uint256     exp   =   uint256  (  weiDecimals   -   perpSzDecimals  );   
+   require  (  exp   <=   77  ,   "TokenMath: exponent too large"  );    
+    L-05:  emergencyRawAction  lacks basic action metadata validation / observability
+  Instances : 1
+ The Governor can send arbitrary bytes:
+     // src/core/MonetrixVault.sol   
+   ICoreWriter  (  HyperCoreConstants  .  CORE_WRITER  ).  sendRawAction  (  data  );   
+   emit     EmergencyActionSent  (  msg  .  sender  ,   keccak256  (  data  ));    
+ The event only contains a hash, not action version or action ID.
+  Impact : Incident review and monitoring must reconstruct data off-chain.
+  Recommendation : Require  data.length >= 4  and emit decoded version/action ID:
+     event     EmergencyActionSent  (   
+         address     indexed     sender  ,   
+         uint8     version  ,   
+         bytes3     actionId  ,   
+         bytes32     dataHash   
+   );    
+    L-06:  setMultisigVaultEnabled  emits no event
+  Instances : 1
+ Unlike most setters, this function changes state without an event.
+  Recommendation : Add:
+     event     MultisigVaultEnabledUpdated  (  bool     enabled  );    
+    L-07:  sUSDM.setConfig  emits no event
+  Instances : 1
+ Config changes affect cooldowns and max yield injection behavior, but no event is emitted.
+  Recommendation : Add:
+     event     ConfigSet  (  address     indexed     config  );    
+    Informational Findings
+ 39 informational issues were also identified in this QA report, and can be viewed  here .
+    Comments
+  The judge and sponsor team commented on this issue, with the sponsor team claiming that all Low-severity issues have been fixed. 
+    Disclosures
+ C4 audits incentivize the discovery of exploits, vulnerabilities, and bugs in smart contracts. Security researchers are rewarded at an increasing rate for finding higher-risk issues. Audit submissions are judged by a knowledgeable security researcher and disclosed to sponsoring developers. C4 does not conduct formal verification regarding the provided code but instead provides final verification.
+ C4 does not provide any guarantee or warranty regarding the security of this project. All smart contract software should be used at the sole risk and responsibility of users.
+ Top 
+     Twitter 
+  Discord 
+  GitHub 
+  Media kit 
+  Terms 
+  Privacy 
+                   

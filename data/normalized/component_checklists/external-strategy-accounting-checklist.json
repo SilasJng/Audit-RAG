@@ -1,0 +1,51 @@
+{
+  "id": "external-strategy-accounting-checklist",
+  "component_type": "external-strategy-accounting",
+  "description": "Checklist for vaults/connectors/accountants that use external strategy, lending, margin, or precompile-reported account state as backing, TVL, solvency, surplus, or settlement input.",
+  "core_invariants": [
+    "external-account value used by local gates must equal net equity, not gross visible assets",
+    "all upstream liability, borrow, debt, held, pending, or encumbered fields must be classified before crediting assets as backing",
+    "a local settlement/mint/withdraw gate must fail when the external account is net negative even if one asset-side field is positive"
+  ],
+  "trust_boundaries": [
+    "local accounting variables vs external precompile/API state",
+    "gross supplied/collateral balances vs borrow/debt liabilities",
+    "spot total balances vs held/locked/spendable balances",
+    "off-chain strategy claims vs on-chain safety gates",
+    "operator-reported yield vs contract-enforced surplus"
+  ],
+  "common_bug_classes": [
+    "gross supply counted as backing without borrow liabilities",
+    "held or margin-encumbered balance treated as spendable",
+    "external account state schema partially decoded",
+    "settlement or yield gate consumes an asset-only adapter value",
+    "connector TVL omits debts, fees, slashing, or pending losses"
+  ],
+  "check_items": [
+    "List every external reader feeding totalAssets, totalBackingSigned, surplus, solvency, collateral ratio, or yield distribution",
+    "For each reader, write the complete upstream response schema and classify every field as asset, liability, held/pending, price, metadata, or unknown",
+    "Search for sibling borrow/debt/liability endpoints when the local reader name says supplied, collateral, balance, or TVL",
+    "For every credited external asset field, identify the exact code path that subtracts matching liabilities before value-moving gates",
+    "Add a negative-equity test: positive supply/collateral plus larger borrow/debt must make surplus or solvency non-positive",
+    "Separate trusted-operator bad-parameter theories from contract-side gate failures caused by omitted liability fields"
+  ],
+  "test_ideas": [
+    "mock external state with supplied=100 and borrow=150, then assert distributableSurplus() <= 0",
+    "mock spot total=100 and hold=100, then assert bridge/withdraw availability is 0 if only free balance is spendable",
+    "toggle a registered external strategy slot from zero debt to nonzero debt and verify share price/surplus decreases",
+    "fuzz asset/liability decimals so debt subtraction uses the same valuation domain as supplied assets"
+  ],
+  "related_pattern_ids": [
+    "external-account-gross-supply-without-borrow-liability-pattern",
+    "connector-tvl-miscalculation-pattern"
+  ],
+  "tags": [
+    "external-accounting",
+    "net-equity",
+    "borrow-liability",
+    "adapter-accounting",
+    "vault-accounting",
+    "settlement-gate",
+    "precompile-reader"
+  ]
+}

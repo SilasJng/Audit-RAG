@@ -51,7 +51,12 @@ FIELD_WEIGHTS = {
     "typical_impact": 1.5,
     "validation_methods": 1.0,
     "goal": 3.0,
-    "assertions": 1.5,
+    "setup_requirements": 1.5,
+    "minimal_state": 2.0,
+    "attacker_actions": 2.0,
+    "assertions": 2.5,
+    "common_failures": 1.5,
+    "notes": 1.0,
     "mitigations": 1.0,
     "common_false_positive_angles": 1.5,
 }

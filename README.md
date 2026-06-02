@@ -32,11 +32,11 @@
 - skill-aware triage 骨架
 
 当前状态：
-- `case_reports`: 117 条，主召回流只放 Medium/High 和少量手写高质量样本；已新增 Stellar/Soroban Rust 类目样本，以及 K2 借贷审计可复用的 Reflector V3、Wise Lending、Silo v3 hook / solvency / oracle 配置案例
-- `false_positive_cases`: 23 条，用于降级、误报和 QA-like caution 通道
-- `vulnerability_patterns`: 25 条，已从现有 C4 样本提炼出 oracle、connector、liquidation、access control、withdrawal、reward、cross-domain queue、Stellar/Soroban Rust、hook callback、stale solvency cache 等核心模式
-- `component_checklists`: 10 条，用于组件级 intake / 模块审计辅助，包含 `stellar-soroban-rust-checklist` 和 `k2-soroban-lending-external-report-checklist`
-- `validation_recipes`: 15 条，用于把候选问题转成 PoC / 单测 / 状态机验证路线
+- `case_reports`: 118 条，主召回流只放 Medium/High 和少量手写高质量样本；已新增 Stellar/Soroban Rust 类目样本，以及 K2 借贷审计可复用的 Reflector V3、Wise Lending、Silo v3 hook / solvency / oracle 配置案例
+- `false_positive_cases`: 24 条，用于降级、误报和 QA-like caution 通道
+- `vulnerability_patterns`: 26 条，已从现有 C4 样本提炼出 oracle、connector、liquidation、access control、withdrawal、reward、cross-domain queue、Stellar/Soroban Rust、hook callback、stale solvency cache、外部账户净权益/PM borrow liability 等核心模式
+- `component_checklists`: 11 条，用于组件级 intake / 模块审计辅助，包含 `stellar-soroban-rust-checklist`、`k2-soroban-lending-external-report-checklist` 和 `external-strategy-accounting-checklist`
+- `validation_recipes`: 16 条，用于把候选问题转成 PoC / 单测 / 状态机验证路线
 - `contest_notes`: 3 条，用于保存 audit page / mitigation review 上下文
 - `hybrid_search.py`: 已有 lexical-first 实现；同时召回 case / pattern / validation recipe，并保持 false-positive caution 通道独立；支持 `ecosystem` / `language` / `runtime` 软加权和 `strict_runtime` 强过滤
 - `lead-ledger`: 已新增活跃审计线索台账，默认落盘到 `data/provisional/contests/<contest-slug>/lead-ledger.jsonl`
@@ -47,7 +47,7 @@
 - `promote-provisional`: 已新增 provisional→normalized 的安全归档入口，默认 dry-run，必须显式 `--confirmed` 才会写入正式 normalized
 - `export-wiki`: 已新增 Obsidian/Markdown 人读知识层导出，默认把 `data/normalized/` 只读导出到 `wiki/generated/`
 - `docs/skills/`: 已镜像相关 Hermes skill Markdown；后续 skill 更新后运行 `python3.11 scripts/sync_skill_docs.py` 同步进仓库
-- `data/eval/retrieval_queries.jsonl`: 41 条手工 recall 查询样本，已覆盖 case / false-positive / pattern / checklist，并纳入 `pytest` 回归测试
+- `data/eval/retrieval_queries.jsonl`: 44 条手工 recall 查询样本，已覆盖 case / false-positive / pattern / checklist，并纳入 `pytest` 回归测试
 - `data/provisional/`: 活跃审计中的候选知识和 lead 状态暂存区，不参与正式 RAG 检索；最终确认后再归档
 
 当前架构默认采用：
