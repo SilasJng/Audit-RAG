@@ -42,3 +42,11 @@ testpaths = ["tests"]
 [tool.ruff]
 line-length = 100
 target-version = "py311"
+exclude = [
+  ".venv",
+  "data/raw",
+  "data/chunks",
+  "data/indexes",
+  "wiki/generated",
+  "src/*.egg-info",
+]

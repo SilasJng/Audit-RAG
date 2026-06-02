@@ -2,6 +2,8 @@ retrieval:
   top_k_lexical: 10
   top_k_semantic: 10
   top_k_final: 8
+  positive_limit: 8
+  caution_limit: 5
 
 scoring:
   semantic_similarity: 0.30
@@ -10,6 +12,43 @@ scoring:
   root_cause_match: 0.10
   severity_relevance: 0.10
   validation_weight: 0.10
+
+field_weights:
+  id: 1.0
+  finding_title: 4.0
+  issue_title: 4.0
+  pattern_name: 4.0
+  name: 4.0
+  title: 4.0
+  root_cause: 5.0
+  broken_invariants: 3.5
+  summary: 2.0
+  description: 2.5
+  issue_claim: 4.0
+  why_it_looked_bad: 2.5
+  why_not_valid: 3.0
+  tags: 3.0
+  component_types: 2.5
+  component_type: 4.0
+  core_invariants: 3.5
+  trust_boundaries: 2.0
+  common_bug_classes: 2.5
+  check_items: 3.0
+  test_ideas: 2.0
+  related_pattern_ids: 1.0
+  common_triggers: 2.0
+  preconditions: 1.5
+  typical_impact: 1.5
+  validation_methods: 1.0
+  goal: 3.0
+  setup_requirements: 1.5
+  minimal_state: 2.0
+  attacker_actions: 2.0
+  assertions: 2.5
+  common_failures: 1.5
+  notes: 1.0
+  mitigations: 1.0
+  common_false_positive_angles: 1.5
 
 filters:
   require_source_trace: true

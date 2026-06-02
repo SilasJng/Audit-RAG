@@ -55,6 +55,26 @@ class ExportWikiResult:
         }
 
 
+@dataclass(frozen=True)
+class WikiLintResult:
+    status: str
+    wiki_dir: str
+    checked_pages: int
+    broken_links: list[dict[str, str]]
+    generated_count: int
+    normalized_count: int
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "status": self.status,
+            "wiki_dir": self.wiki_dir,
+            "checked_pages": self.checked_pages,
+            "broken_links": self.broken_links,
+            "generated_count": self.generated_count,
+            "normalized_count": self.normalized_count,
+        }
+
+
 def export_wiki(root_path: str | Path = ".", wiki_dir: str | Path = "wiki") -> ExportWikiResult:
     """Export normalized JSON records into a read-only Markdown wiki layer."""
     root = Path(root_path)
@@ -94,6 +114,45 @@ def export_wiki(root_path: str | Path = ".", wiki_dir: str | Path = "wiki") -> E
         generated_dir=_relpath(generated_dir, root),
         exported_count=len(pages),
         pages=pages,
+    )
+
+
+def lint_wiki(root_path: str | Path = ".", wiki_dir: str | Path = "wiki") -> WikiLintResult:
+    """Check the human/wiki layer for broken wikilinks and generated-count drift."""
+
+    root = Path(root_path)
+    wiki_path = root / wiki_dir
+    pages = sorted(wiki_path.rglob("*.md")) if wiki_path.exists() else []
+    existing = {_wiki_link_target(path, wiki_path) for path in pages}
+    broken: list[dict[str, str]] = []
+    link_re = re.compile(r"\[\[([^\]|#]+)(?:#[^\]|]+)?(?:\|[^\]]+)?\]\]")
+    for page in pages:
+        text = page.read_text(encoding="utf-8")
+        for match in link_re.finditer(text):
+            target = match.group(1).strip().removesuffix(".md")
+            if target and target not in existing:
+                broken.append(
+                    {
+                        "page": _relpath(page, root),
+                        "target": target,
+                    }
+                )
+    generated_count = 0
+    if wiki_path.exists():
+        for source_dir_name in DOCUMENT_DIRS:
+            generated_count += len(list((wiki_path / "generated" / source_dir_name).glob("*.md")))
+    generated_record_count = generated_count
+    normalized_count = 0
+    normalized_dir = root / "data" / "normalized"
+    for source_dir_name in DOCUMENT_DIRS:
+        normalized_count += len(list((normalized_dir / source_dir_name).glob("*.json")))
+    return WikiLintResult(
+        status="ok" if not broken and generated_record_count in {0, normalized_count} else "failed",
+        wiki_dir=_relpath(wiki_path, root),
+        checked_pages=len(pages),
+        broken_links=broken,
+        generated_count=generated_record_count,
+        normalized_count=normalized_count,
     )
 
 
@@ -259,6 +318,10 @@ def _flatten_to_strings(value: Any) -> list[str]:
 def _slugify(value: str) -> str:
     slug = re.sub(r"[^A-Za-z0-9._-]+", "-", value.strip().lower()).strip("-")
     return slug or "record"
+
+
+def _wiki_link_target(path: Path, wiki_path: Path) -> str:
+    return path.relative_to(wiki_path).with_suffix("").as_posix()
 
 
 def _relpath(path: Path, root: Path) -> str:

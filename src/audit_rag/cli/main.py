@@ -16,7 +16,7 @@ from audit_rag.quality.data_quality import validate_normalized_data
 from audit_rag.retrieval.issue_triage import triage_issue
 from audit_rag.retrieval.query_context import QueryContext
 from audit_rag.services.output_formatter import to_pretty_json
-from audit_rag.wiki.exporter import export_wiki
+from audit_rag.wiki.exporter import export_wiki, lint_wiki
 
 app = typer.Typer(help="audit-rag CLI")
 
@@ -56,7 +56,7 @@ def _query_context(
 @app.command()
 def ingest(source_dir: str) -> None:
     """Ingest raw report sources."""
-    run_ingest(source_dir)
+    print(to_pretty_json(run_ingest(source_dir)))
 
 
 @app.command("triage-issue")
@@ -262,6 +262,17 @@ def export_wiki_cmd(
 ) -> None:
     """Export normalized JSON records into read-only Markdown pages under wiki/generated/."""
     print(to_pretty_json(export_wiki(wiki_dir=wiki_dir).to_dict()))
+
+
+@app.command("lint-wiki")
+def lint_wiki_cmd(
+    wiki_dir: str = typer.Option("wiki", help="Wiki directory relative to repo root."),
+) -> None:
+    """Lint wiki wikilinks and generated/normalized count drift."""
+    result = lint_wiki(wiki_dir=wiki_dir).to_dict()
+    print(to_pretty_json(result))
+    if result["status"] != "ok":
+        raise typer.Exit(code=1)
 
 
 @app.command("validate-data")

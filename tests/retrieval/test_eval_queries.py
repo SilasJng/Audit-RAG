@@ -16,13 +16,24 @@ def test_retrieval_eval_queries_hit_expected_ids() -> None:
         positive_ids = [item["id"] for item in result["positive_matches"]]
         caution_ids = [item["id"] for item in result["caution_matches"]]
 
+        expected_top_ids = row.get("expected_top_ids", [])
+        expected_document_types = row.get("expected_document_types", [])
+        positive_document_types = [item["document_type"] for item in result["positive_matches"]]
+
         missing_positive = [item for item in row.get("expected_positive_ids", []) if item not in positive_ids]
         missing_caution = [item for item in row.get("expected_caution_ids", []) if item not in caution_ids]
-        if missing_positive or missing_caution:
+        missing_top = [item for item in expected_top_ids if item not in positive_ids[: len(expected_top_ids)]]
+        missing_document_types = [
+            item for item in expected_document_types if item not in positive_document_types
+        ]
+        if missing_positive or missing_caution or missing_top or missing_document_types:
             failures.append(
                 f"line {line_number} {row.get('id')}: "
                 f"missing_positive={missing_positive}, positive_ids={positive_ids}; "
-                f"missing_caution={missing_caution}, caution_ids={caution_ids}"
+                f"missing_caution={missing_caution}, caution_ids={caution_ids}; "
+                f"missing_top={missing_top}, expected_top_ids={expected_top_ids}; "
+                f"missing_document_types={missing_document_types}, "
+                f"positive_document_types={positive_document_types}"
             )
 
     assert not failures, "\n".join(failures)

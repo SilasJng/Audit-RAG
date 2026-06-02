@@ -114,7 +114,10 @@ def test_promote_provisional_requires_confirmation(tmp_path, monkeypatch) -> Non
                 "candidate": {
                     "id": "demo-pattern",
                     "name": "Demo Pattern",
+                    "category": "test-category",
                     "description": "Only a test candidate.",
+                    "severity_baseline": "medium when value-moving state is affected",
+                    "tags": ["test-pattern"],
                 },
             }
         )

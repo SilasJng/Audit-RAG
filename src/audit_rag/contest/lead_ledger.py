@@ -8,11 +8,15 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from jsonschema import Draft202012Validator
 from pydantic import BaseModel, Field
+
+from audit_rag.quality.data_quality import validate_normalized_data
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 _PROVISIONAL_DIR = _REPO_ROOT / "data" / "provisional" / "contests"
 _NORMALIZED_DIR = _REPO_ROOT / "data" / "normalized"
+_SCHEMA_DIR = _REPO_ROOT / "schemas"
 
 LEAD_STATUSES = {
     "new",
@@ -263,6 +267,28 @@ def export_contest_summary(contest_slug: str) -> dict[str, Any]:
     }
 
 
+
+def _schema_for_record_type(record_type: str) -> Path | None:
+    schema_names = {
+        "case_report": "case_report.schema.json",
+        "vulnerability_pattern": "vulnerability_pattern.schema.json",
+        "component_checklist": "component_checklist.schema.json",
+        "validation_recipe": "validation_recipe.schema.json",
+        "false_positive_case": "false_positive_case.schema.json",
+        "contest_note": "contest_note.schema.json",
+    }
+    name = schema_names.get(record_type)
+    return _SCHEMA_DIR / name if name else None
+
+
+def _schema_errors(record_type: str, candidate: dict[str, Any]) -> list[str]:
+    schema_path = _schema_for_record_type(record_type)
+    if not schema_path or not schema_path.exists():
+        return [f"missing schema for record_type={record_type}"]
+    schema = json.loads(schema_path.read_text(encoding="utf-8"))
+    validator = Draft202012Validator(schema)
+    return [error.message for error in validator.iter_errors(candidate)]
+
 def _candidate_id(candidate: dict[str, Any], record_type: str) -> str:
     for key in ("id", "pattern_id", "recipe_id", "checklist_id"):
         value = candidate.get(key)
@@ -307,13 +333,18 @@ def promote_provisional(contest_slug: str, confirmed: bool = False) -> dict[str,
             continue
         record_id = _candidate_id(candidate, record_type)
         target = _NORMALIZED_DIR / PROMOTION_TARGETS[record_type] / f"{record_id}.json"
+        schema_errors = _schema_errors(record_type, candidate)
         item = {
             "source": str(source_path),
             "target": str(target),
             "record_type": record_type,
             "record_id": record_id,
+            "schema_status": "ok" if not schema_errors else "failed",
+            "schema_errors": schema_errors,
         }
         planned.append(item)
+        if schema_errors:
+            continue
         if confirmed:
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_text(
@@ -323,8 +354,9 @@ def promote_provisional(contest_slug: str, confirmed: bool = False) -> dict[str,
             promoted.append(item)
     manifest = contest_dir(contest_slug) / "promotion-manifest.json"
     manifest.parent.mkdir(parents=True, exist_ok=True)
+    validation_result = validate_normalized_data() if confirmed else None
     result = {
-        "status": "ok",
+        "status": "ok" if not confirmed or validation_result["status"] == "ok" else "failed",
         "action": "promote-provisional",
         "confirmed": confirmed,
         "contest_slug": contest_slug,
@@ -332,8 +364,9 @@ def promote_provisional(contest_slug: str, confirmed: bool = False) -> dict[str,
         "promoted_count": len(promoted),
         "planned": planned,
         "promoted": promoted,
+        "validation_result": validation_result,
         "manifest_path": str(manifest),
-        "warning": "confirmed=false is a dry run; use only after final outcome and curation review",
+        "warning": "confirmed=false is a dry run; use only after final outcome and curation review; add eval queries for every promoted retrieval family",
     }
     manifest.write_text(json.dumps(result, indent=2, ensure_ascii=False, sort_keys=True) + "\n", encoding="utf-8")
     return result

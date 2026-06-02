@@ -23,7 +23,7 @@ DOCUMENT_SETS = {
 }
 
 
-FIELD_WEIGHTS = {
+DEFAULT_FIELD_WEIGHTS = {
     "id": 1.0,
     "finding_title": 4.0,
     "issue_title": 4.0,
@@ -60,6 +60,50 @@ FIELD_WEIGHTS = {
     "mitigations": 1.0,
     "common_false_positive_angles": 1.5,
 }
+_CONFIG_PATH = _REPO_ROOT / "configs" / "retrieval.yaml"
+
+
+@lru_cache(maxsize=1)
+def _retrieval_config() -> dict[str, Any]:
+    if not _CONFIG_PATH.exists():
+        return {}
+    try:
+        import yaml
+
+        with _CONFIG_PATH.open("r", encoding="utf-8") as f:
+            data = yaml.safe_load(f) or {}
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
+def _field_weights() -> dict[str, float]:
+    configured = _retrieval_config().get("field_weights", {})
+    if not isinstance(configured, dict):
+        return DEFAULT_FIELD_WEIGHTS
+    weights = DEFAULT_FIELD_WEIGHTS.copy()
+    for key, value in configured.items():
+        try:
+            weights[str(key)] = float(value)
+        except (TypeError, ValueError):
+            continue
+    return weights
+
+
+def _positive_limit() -> int:
+    value = _retrieval_config().get("retrieval", {}).get("positive_limit", 8)
+    try:
+        return max(1, int(value))
+    except (TypeError, ValueError):
+        return 8
+
+
+def _caution_limit() -> int:
+    value = _retrieval_config().get("retrieval", {}).get("caution_limit", 5)
+    try:
+        return max(1, int(value))
+    except (TypeError, ValueError):
+        return 5
 
 
 STOPWORDS = {
@@ -123,7 +167,7 @@ def _load_documents(document_type: str) -> tuple[dict[str, Any], ...]:
 def _field_score(query_terms: set[str], data: dict[str, Any]) -> tuple[float, list[str]]:
     score = 0.0
     matched_terms: set[str] = set()
-    for field, weight in FIELD_WEIGHTS.items():
+    for field, weight in _field_weights().items():
         text = _flatten(data.get(field))
         if not text:
             continue
@@ -316,10 +360,10 @@ def hybrid_search(query: str, context: QueryContext | None = None) -> dict[str, 
         query,
         runtime,
         ["case_report", "vulnerability_pattern", "component_checklist", "validation_recipe"],
-        limit=8,
+        limit=_positive_limit(),
     )
     caution_matches = (
-        _rank(query, runtime, ["false_positive_case"], limit=5)
+        _rank(query, runtime, ["false_positive_case"], limit=_caution_limit())
         if runtime.require_false_positive_check
         else []
     )
