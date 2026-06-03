@@ -172,6 +172,12 @@ Rules:
 4. Cross-session continuation should use `export-contest-summary`.
 5. `promote-provisional` is dry-run by default; only use `--confirmed` after final outcome and manual curation review.
 
+Active-contest state sync discipline:
+- Before committing provisional contest updates, run `export-contest-summary <contest-slug>` and `validate-data` from the audit-rag venv.
+- Inspect `git status --short` and add only the intended contest files under `data/provisional/contests/<contest-slug>/`; do not sweep unrelated untracked contest directories into the commit.
+- Commit audit-rag state in `/Users/qwe/Audit/audit-rag` separately from the active contest repo. Do not commit active contest repo changes unless the user explicitly asks.
+- If `git push` prints a GitHub "repository moved" notice but exits `0`, treat the push as successful and mention the old/new remote mismatch; optionally update `origin` later, but do not report the push as failed.
+
 ## Minimal code expectations
 
 ### Triage output should include
@@ -196,6 +202,33 @@ Recommended context fields:
 - `audit_goal`
 - `require_false_positive_check`
 - `desired_output_schema`
+
+## Skill boundary / mirror maintenance workflow
+
+Use this when renaming or refactoring local Hermes skills that are mirrored into `/Users/qwe/Audit/audit-rag/docs/skills/`, especially when separating a live audit adapter skill from the audit-rag backend maintainer skill.
+
+Recommended steps:
+1. Inspect local skill dirs under `~/.hermes/skills/software-development/` and the repo mirror under `docs/skills/` before editing.
+2. For a local skill rename, move the directory and update SKILL.md frontmatter `name`, `description`, title, trigger text, and any self-references.
+3. Keep boundary text explicit:
+   - live contest skills such as `c4-contest-auditor` should keep only the thin active-audit calling contract for audit-rag
+   - `audit-rag-workbench-maintainer` should keep repo/CLI/schema/data/test/sync implementation details
+4. Update `/Users/qwe/Audit/audit-rag/scripts/sync_skill_docs.py` to point at the new local skill path and mirror directory.
+5. Remove stale mirrored directories such as an old skill name under `docs/skills/` before running the sync script.
+6. Run:
+   ```bash
+   cd /Users/qwe/Audit/audit-rag
+   python3.11 scripts/sync_skill_docs.py
+   ```
+7. Search for stale old skill names in the repo and local skill content before committing.
+8. Verify the audit-rag repo even if only docs/skills changed:
+   ```bash
+   source .venv/bin/activate
+   python -m audit_rag.cli.main validate-data
+   pytest -q
+   ruff check .
+   ```
+9. Commit and push the mirror/script changes. If the rename changes future routing, update memory with the new local skill name.
 
 ## Local verification steps
 
@@ -300,6 +333,8 @@ Practical extraction notes:
 - `broken_invariants` must be issue-specific and retrieval-useful. Never keep generic templates like `The staking flow should preserve protocol accounting, authorization, and user fund invariants.`
 - `tags` are semantic cross-protocol filters. Remove protocol names and severity/classification words such as `ethena`, `kinetiq`, `nudgexyz`, `high`, `medium`, `low`.
 - Low/Non-critical/QA items should usually become `false_positive_cases` or be dropped. Keep only items that explain why a suspicious pattern is not Medium/High unless extra reachability/value-loss conditions are proven.
+- Exception after the LayerZero Stellar Endpoint postmortem: keep a small number of reusable Low/NC/QA raw lessons in `data/normalized/low_non_critical_cases/` when they improve future suppression/checklist behavior (for example raw balance fee donation, message-library interface mismatch, tagless Soroban address codecs). These must stay in the caution channel, never in `case_reports` / positive HM retrieval.
+- When adding `low_non_critical_cases`, update lexical retrieval so they are returned with `false_positive_cases` as caution evidence, add eval queries that expect them in `expected_caution_ids`, and document `why_not_medium_or_high` plus `when_it_could_escalate`.
 - For the local project, keep the data quality policy in `docs/data-curation-quality-gate.md` and update it when the ingestion rules change.
 - After ingestion or curation, if the project is already bound to GitHub, commit and push the changed raw + normalized + docs files after schema/test verification.
 - For this project path, check git state first; do not assume commit or branch operations are available.
@@ -410,8 +445,68 @@ Recommended steps:
 Practical lessons:
 - `validate-data` can pass while retrieval coverage is still weak; always pair curation with eval queries.
 - Expanding data object types may require retriever field weights and projection changes, otherwise new records exist but are not useful to RAG.
+- When adding or newly relying on `validation_recipes`, ensure `src/audit_rag/indexing/hybrid_search.py` weights recipe fields such as `goal`, `setup_requirements`, `minimal_state`, `attacker_actions`, `assertions`, `common_failures`, and `notes`; otherwise recipe evals may fail even though schema validation passes.
+- Keep eval expectations stable and specific: for a query derived from one newly curated case, require the exact case id; only add broad checklist/pattern ids to `expected_positive_ids` when the current retriever actually and consistently ranks them. Use a recipe-specific query when expecting a validation recipe in top matches.
 - If eval output is truncated, rerun a narrower script that prints only missing ids and top retrieved ids.
 - When README says old counts such as 1 pattern / 1 checklist / 1 recipe, update it in the same commit as the data expansion to avoid stale continuation context.
+- Monetrix M-01 net-equity curation details and retrieval-regression pitfall are captured in `references/monetrix-net-equity-curation.md`.
+- Repo maintenance optimization notes from the post-Monetrix review are captured in `references/audit-rag-maintenance-optimization-review.md`: focused lint scope, CI baseline, ingest stub hardening, stronger quality gates, stricter evals, configurable field weights, wiki lint, and promote-provisional gates.
+- Concrete implementation notes for those maintenance gates are captured in `references/maintenance-gates-implementation.md`, including safe ingest-draft behavior, wiki-lint count pitfalls, optional eval expectations, promote schema/quality gates, and the GitHub PAT `workflow` scope needed when committing `.github/workflows/*.yml`.
+
+## Project maintenance optimization checklist
+
+Use this checklist when the user asks “what else can be optimized” or after a successful audit-rag curation/push cycle:
+
+1. Remote hygiene:
+   - If GitHub reports a moved repository but push exits `0`, treat the push as successful, then update `origin` with `git remote set-url origin <new-url>` and verify with `git fetch origin --prune && git status -sb`.
+2. Lint scope:
+   - Do not let `ruff check .` lint third-party/raw report artifacts under `data/raw/**` or generated wiki/output directories.
+   - Prefer `ruff check src tests scripts`, or add `pyproject.toml` excludes for raw/generated/vendor-like paths.
+3. CI baseline:
+   - Add/maintain GitHub Actions around Python 3.11, `validate-data`, `pytest -q`, and scoped ruff.
+4. Stub commands:
+   - Any exposed CLI command that still behaves as a TODO should either fail explicitly with guidance or produce safe draft/provisional output; avoid a command that appears to succeed while doing nothing.
+5. Data quality:
+   - Tighten `validate-data` beyond schema shape: source URLs, snippets/blob permalinks, id/filename consistency, validation-status vocabulary, and polluted tags.
+6. Retrieval eval:
+   - Pair each new retrieval family with eval. Add top-rank/type/runtime expectations when the current simple “id appears somewhere” check is too weak.
+7. Promotion safety:
+   - `promote-provisional --confirmed` should eventually validate candidate schema, run quality gates after write, and warn if eval coverage is missing.
+8. Three-batch hardening reference:
+   - See `references/audit-rag-three-batch-hardening.md` for the concrete implementation pattern covering ruff/CI, safe ingest drafts, semantic data-quality gates, stricter retrieval evals, promote-provisional schema/quality gates, configurable retrieval weights, wiki lint, and cleanup/verification discipline.
+
+## External audit-report sweep workflow
+
+When the user provides a set of public audit reports, GitHub audit directories, or PDF audit reports to enrich audit-rag for an active contest, treat it as an external-report sweep plus retrieval-regression task.
+
+Recommended steps:
+1. Save all raw sources under a stable batch directory such as `data/raw/external-reports-<contest-slug-or-date>/`.
+2. For GitHub audit directories, use the GitHub contents API instead of scraping the web UI:
+   - `https://api.github.com/repos/<owner>/<repo>/contents/<path>?ref=<branch>`
+   - recursively walk directories, save `file-list.json`, then download each `download_url` or raw URL.
+   - URL-quote file names containing spaces or Unicode punctuation.
+3. For PDFs, load the generic `ocr-and-documents` skill. On this machine, do not install PDF libraries into the externally-managed `python3.11`; activate the audit-rag `.venv` first, then install/use `pymupdf` there if needed:
+   - `cd /Users/qwe/Audit/audit-rag && source .venv/bin/activate && pip install pymupdf`
+   - extract each PDF to adjacent `.txt` under the raw batch directory.
+4. Extract only retrieval-useful lessons into normalized data:
+   - confirmed HM-like findings become `case_reports`
+   - reusable causes become `vulnerability_patterns`
+   - contest-specific synthesis becomes `data/provisional/contests/<slug>/...md`
+   - downgrade/theoretical/dust-only lessons become `false_positive_cases`
+   - add at least one `component_checklist` or `validation_recipe` when the sweep is meant to guide an active contest.
+5. For active contests, it is acceptable to add curated public historical cases to `data/normalized/`, but keep the contest-specific mapping and smoke leads under `data/provisional/contests/<contest-slug>/`.
+6. Preserve strict-runtime hygiene: if a pattern is intended for Soroban/Rust retrieval, set `applicable_languages: ["rust-soroban"]` even when the original analogy came from Solidity; keep the cross-runtime source in `related_case_ids`/description. Otherwise strict Soroban queries may return Solidity metadata and fail runtime-regression tests.
+7. Append eval queries for every new family: direct case, pattern/checklist, and caution channel.
+8. Run the full gate before committing:
+   - `source .venv/bin/activate`
+   - `python -m audit_rag.cli.main validate-data`
+   - `python -m audit_rag.cli.main --help`
+   - `pytest -q`
+   - create one temporary `add-lead` + `triage-lead` smoke test for the active contest and confirm it retrieves the new records.
+9. Update README counts and retrieval coverage wording in the same commit as the data changes.
+10. Commit and push after verification; if GitHub reports a moved repository, note the redirect/remote mismatch separately rather than treating push as failed.
+
+Practical example: a K2 Stellar/Soroban lending sweep used Reflector V3 for native Soroban `require_auth`, TTL/vector, and oracle partial-update cases, and Silo v3 PDF audits for lending hook/callback, stale solvency config after debt transfer, and dynamic oracle calldata lessons. The K2-specific synthesis stayed under `data/provisional/contests/2026-04-k2/`, while curated historical records went into `data/normalized/` with eval queries and a `triage-lead` smoke test.
 
 ## New runtime/category expansion workflow
 
@@ -469,6 +564,8 @@ Practical lessons from adding Stellar/Soroban Rust:
 
 When the user asks whether to add Obsidian, an LLM Wiki, a markdown knowledge base, or a human-readable notes layer to `/Users/qwe/Audit/audit-rag`, treat it as an architecture fit assessment before implementation.
 
+Session-specific POC reference: `references/obsidian-wiki-poc.md` captures the first working wiki shape, seed topic, boundary rules, and wikilink verification pattern.
+
 Default conclusion from the current project state:
 - Obsidian / LLM Wiki can improve later audits, but should be an upper reading/synthesis/navigation layer, not the authoritative retrieval engine.
 - Keep `data/normalized/` JSON, schemas, eval queries, and CLI triage as the machine-readable source of truth.
@@ -489,15 +586,19 @@ Recommended fit check:
    - create `/Users/qwe/Audit/audit-rag/wiki/` only if the user wants to proceed
    - initialize `SCHEMA.md`, `index.md`, and `log.md`
    - choose one high-value vulnerability family first, such as async bridge accounting, reward debt desync, oracle freshness/price domain, or Soroban `require_auth`
-   - write 3-5 pages maximum: one concept page, one false-positive/downgrade trap page, one validation/triage query page, optionally one cross-runtime comparison
+   - if choosing Soroban `require_auth`, the proven seed shape is: one concept page, one false-positive/downgrade page, one triage-query page, and one generated source-map page linking `soroban-require-auth-entrypoint-bypass-pattern`, `c4-2025-02-blend-v2-h-02`, `c4-2025-02-blend-v2-m-01`, `soroban-internal-helper-missing-require-auth-fp-01`, and `soroban-require-auth-entrypoint-matrix-recipe`
+   - write 3-5 substantive pages maximum; avoid broad auto-generation until the user confirms the reading workflow is useful
 4. Preserve layer boundaries:
    - `wiki/generated/` may contain read-only markdown exported from `data/normalized/`; mark it generated and do not edit manually
    - `wiki/concepts/`, `wiki/comparisons/`, and `wiki/queries/` may contain agent/human synthesized pages
    - active audit knowledge still belongs under `data/provisional/contests/<slug>/` first; if mirrored to wiki, mark it provisional/low-confidence and do not promote it to `data/normalized/` or formal eval until confirmed
-5. Future integration can add:
-   - `export-wiki` CLI for read-only generated markdown
+5. Current wiki integration:
+   - `export-wiki` CLI exists and exports normalized JSON to read-only Markdown under `wiki/generated/`
+   - first committed shape used Soroban `require_auth` concept/false-positive/query pages plus a generated index for 193 normalized records
+6. Future integration can add:
    - `related_wiki_pages` in triage output as explanation/navigation, while JSON retrieval remains the evidence source
    - wiki lint for broken links, stale pages, unindexed pages, and low-confidence claims
+   - optional filtering such as exporting only one bug family when full generated output is too noisy
 
 Avoid:
 - converting existing normalized JSON records into hand-maintained markdown as the primary source
@@ -509,6 +610,7 @@ Avoid:
 Overlap note:
 - Use the generic `llm-wiki` and `obsidian` skills for wiki mechanics.
 - Use this `audit-rag-workbench-maintainer` section for audit-rag-specific boundaries, source-of-truth policy, and quality gates.
+- See `references/obsidian-wiki-layer-assessment.md` for the condensed assessment of using an X/Twitter-style Obsidian local knowledge-base approach with audit-rag, including the recommended `wiki/` layout and first POC shape.
 
 ## Good next steps after maintenance changes
 

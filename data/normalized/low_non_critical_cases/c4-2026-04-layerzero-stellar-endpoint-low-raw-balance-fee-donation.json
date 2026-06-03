@@ -1,0 +1,41 @@
+{
+  "affected_functions": [
+    "pay_messaging_fees",
+    "Endpoint::send fee/refund flow"
+  ],
+  "classification": "low",
+  "component_types": [
+    "endpoint-fee-accounting",
+    "cross-chain-messaging"
+  ],
+  "id": "c4-2026-04-layerzero-stellar-endpoint-low-raw-balance-fee-donation",
+  "issue_title": "Endpoint fee payment can consume donated or leftover native balance instead of only caller-provided funds",
+  "language": "rust-soroban",
+  "operational_risk": "Residual value may be unintentionally paid to workers or refunded to a later sender, creating accounting surprise and support burden.",
+  "project_repo": "https://github.com/code-423n4/2026-04-layerzero",
+  "protocol_name": "LayerZero Stellar Endpoint",
+  "recommended_mitigation": [
+    "Track call-local fee funds explicitly instead of using raw balance deltas.",
+    "Reject unsolicited residual fee balances or sweep them through a governed recovery path with clear ownership."
+  ],
+  "retrieval_channel": "low_non_critical_caution",
+  "root_cause": "Fee accounting relies on ambient contract/account balance instead of an explicit per-call or per-sender funded amount.",
+  "source_name": "Code4rena 2026-04 LayerZero Stellar Endpoint final report",
+  "source_report_section": "Low severity findings: pay_messaging_fees / residual balance refund behavior",
+  "source_type": "code4rena-final-report",
+  "source_url": "https://code4rena.com/reports/2026-04-layerzero-stellar-endpoint",
+  "summary": "The endpoint fee path reasons over the contract/account raw balance, so accidental donations or failed-call leftovers can be consumed or refunded in a later sender flow. The report treated this as an operational accounting hazard rather than a direct permissionless theft of an identified victim balance.",
+  "tags": [
+    "rust-soroban",
+    "endpoint",
+    "fee-accounting",
+    "raw-balance",
+    "residual-balance",
+    "downgrade-calibration"
+  ],
+  "when_it_could_escalate": [
+    "The protocol documents or implements a per-user prefunded escrow and another user can consume that escrow.",
+    "A repeatable permissionless path lets an attacker force a victim to deposit meaningful funds before the attacker-controlled send/refund path executes."
+  ],
+  "why_not_medium_or_high": "A Medium/High claim requires a concrete victim-funded escrow invariant and a permissionless path that lets an attacker extract or force loss of meaningful value. In the public report framing, the affected value is donated dust or leftover balance and the impact is cleanup/refund ambiguity, so the correct retrieval channel is downgrade/caution."
+}

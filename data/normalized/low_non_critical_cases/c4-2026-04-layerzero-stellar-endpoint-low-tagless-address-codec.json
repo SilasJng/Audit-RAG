@@ -1,0 +1,40 @@
+{
+  "affected_functions": [
+    "write_address_payload"
+  ],
+  "classification": "non-critical",
+  "component_types": [
+    "codec",
+    "address-serialization",
+    "cross-chain-messaging"
+  ],
+  "id": "c4-2026-04-layerzero-stellar-endpoint-low-tagless-address-codec",
+  "issue_title": "Address payload serialization drops account-vs-contract variant information",
+  "language": "rust-soroban",
+  "operational_risk": "Bridges, off-chain indexers, or OApps may misinterpret address kind and produce brittle integrations.",
+  "project_repo": "https://github.com/code-423n4/2026-04-layerzero",
+  "protocol_name": "LayerZero Stellar Endpoint",
+  "recommended_mitigation": [
+    "Encode the address discriminant/tag together with bytes.",
+    "Document any intentional cross-chain canonical address format and add round-trip tests for account and contract addresses."
+  ],
+  "retrieval_channel": "low_non_critical_caution",
+  "root_cause": "Cross-runtime address serialization discards type metadata needed to faithfully reconstruct the original address domain.",
+  "source_name": "Code4rena 2026-04 LayerZero Stellar Endpoint final report",
+  "source_report_section": "Non-critical / informational findings: write_address_payload loses account/contract address variant tag",
+  "source_type": "code4rena-final-report",
+  "source_url": "https://code4rena.com/reports/2026-04-layerzero-stellar-endpoint",
+  "summary": "An address codec can serialize address bytes without preserving whether the original Soroban address was an account or contract variant. The public report treated this as compatibility/integration risk unless a downstream consumer relies on the lost tag for authorization or routing.",
+  "tags": [
+    "rust-soroban",
+    "address-codec",
+    "serialization",
+    "type-tag",
+    "cross-chain-messaging"
+  ],
+  "when_it_could_escalate": [
+    "A receiver authorizes contract addresses and account addresses differently but consumes the tagless payload.",
+    "A routed message or refund can be redirected because two address domains collide after serialization."
+  ],
+  "why_not_medium_or_high": "Tag loss alone is not enough for Medium/High unless the receiving side makes a security decision based on reconstructed address kind or can be tricked into routing/authorizing value incorrectly."
+}

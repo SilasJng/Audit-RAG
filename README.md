@@ -33,12 +33,13 @@
 
 当前状态：
 - `case_reports`: 118 条，主召回流只放 Medium/High 和少量手写高质量样本；已新增 Stellar/Soroban Rust 类目样本，以及 K2 借贷审计可复用的 Reflector V3、Wise Lending、Silo v3 hook / solvency / oracle 配置案例
-- `false_positive_cases`: 24 条，用于降级、误报和 QA-like caution 通道
+- `false_positive_cases`: 25 条，用于降级、误报和 QA-like caution 通道；新增 LayerZero Stellar raw-balance prefund theft overclaim 降级样本
+- `low_non_critical_cases`: 3 条，保存有复盘价值的 Low/NC/QA 原始案例，只进入 caution retrieval channel，不进入主 HM positive stream
 - `vulnerability_patterns`: 26 条，已从现有 C4 样本提炼出 oracle、connector、liquidation、access control、withdrawal、reward、cross-domain queue、Stellar/Soroban Rust、hook callback、stale solvency cache、外部账户净权益/PM borrow liability 等核心模式
-- `component_checklists`: 11 条，用于组件级 intake / 模块审计辅助，包含 `stellar-soroban-rust-checklist`、`k2-soroban-lending-external-report-checklist` 和 `external-strategy-accounting-checklist`
+- `component_checklists`: 12 条，用于组件级 intake / 模块审计辅助，包含 `stellar-soroban-rust-checklist`、`k2-soroban-lending-external-report-checklist`、`external-strategy-accounting-checklist` 和 `endpoint-message-library-low-harvest-checklist`
 - `validation_recipes`: 16 条，用于把候选问题转成 PoC / 单测 / 状态机验证路线
 - `contest_notes`: 3 条，用于保存 audit page / mitigation review 上下文
-- `hybrid_search.py`: 已有 lexical-first 实现；同时召回 case / pattern / validation recipe，并保持 false-positive caution 通道独立；支持 `ecosystem` / `language` / `runtime` 软加权和 `strict_runtime` 强过滤
+- `hybrid_search.py`: 已有 lexical-first 实现；同时召回 case / pattern / checklist / validation recipe，并保持 false-positive + Low/NC caution 通道独立；支持 `ecosystem` / `language` / `runtime` 软加权和 `strict_runtime` 强过滤
 - `lead-ledger`: 已新增活跃审计线索台账，默认落盘到 `data/provisional/contests/<contest-slug>/lead-ledger.jsonl`
 - `triage-lead`: 已新增基于 RAG 的 lead scorecard，输出 root-cause/pattern 相似度、suppression signals、validation recipe 和 report framing，并保存到 `data/provisional/contests/<contest-slug>/rag-triage/`
 - `suppress-check`: 已新增 duplicate / false-positive / QA downgrade 风险检查入口
@@ -47,7 +48,7 @@
 - `promote-provisional`: 已新增 provisional→normalized 的安全归档入口，默认 dry-run，必须显式 `--confirmed` 才会写入正式 normalized
 - `export-wiki`: 已新增 Obsidian/Markdown 人读知识层导出，默认把 `data/normalized/` 只读导出到 `wiki/generated/`
 - `docs/skills/`: 已镜像相关 Hermes skill Markdown；后续 skill 更新后运行 `python3.11 scripts/sync_skill_docs.py` 同步进仓库
-- `data/eval/retrieval_queries.jsonl`: 44 条手工 recall 查询样本，已覆盖 case / false-positive / pattern / checklist，并纳入 `pytest` 回归测试
+- `data/eval/retrieval_queries.jsonl`: 47 条手工 recall 查询样本，已覆盖 case / false-positive / Low/NC caution / pattern / checklist，并纳入 `pytest` 回归测试
 - `data/provisional/`: 活跃审计中的候选知识和 lead 状态暂存区，不参与正式 RAG 检索；最终确认后再归档
 
 当前架构默认采用：

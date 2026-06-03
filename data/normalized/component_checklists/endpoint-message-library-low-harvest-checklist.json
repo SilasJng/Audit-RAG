@@ -1,0 +1,57 @@
+{
+  "check_items": [
+    "After HM search, run a separate QA/Low pass over raw balances, dust recovery, refund addresses, zero amount handling, and donation leftovers.",
+    "For every blocked/default message library, compare advertised interface/capability flags with implemented callable functions.",
+    "Search codec helpers for Address, payload hash, nonce, DVN option, and sentinel serialization; assert round-trip tests keep tags and reject nil sentinels when relevant.",
+    "Review custom-to-default library cutover and grace-window semantics separately from active receive/send library overwrite leads.",
+    "Check worker/admin/signer vectors for caps, batched rotation, duplicate entries, zero admins, and high-s/v signature edge cases.",
+    "Compare quote/get_fee outputs with assign_job/payment paths and verify no amount drift is silently accepted.",
+    "Sweep pagination u32 casts, i128 sums/multiplications, and zero treasury amounts for QA/Low or escalation conditions."
+  ],
+  "common_bug_classes": [
+    "ambient-balance-accounting",
+    "interface-capability-mismatch",
+    "tagless-codec",
+    "sentinel-value-validation",
+    "unbounded-admin-vector",
+    "default-config-inheritance",
+    "quote-assign-fee-mismatch",
+    "ttl-archive-footgun",
+    "unchecked-integer-aggregation"
+  ],
+  "component_type": "endpoint-message-library-low-harvest",
+  "core_invariants": [
+    "Fee/refund logic should use explicit call-local amounts, not ambient raw balances, unless residual ownership is documented.",
+    "Library capability metadata should match implemented send/receive behavior.",
+    "Cross-chain codecs should preserve security-relevant type tags and sentinel values.",
+    "Default/custom library and config inheritance should not silently change message safety assumptions.",
+    "Admin, worker, signer, and DVN vectors should remain bounded and operationally recoverable."
+  ],
+  "description": "Checklist for the post-HM QA/Low harvest phase in Rust/Soroban endpoint and cross-chain message-library repositories, derived from the LayerZero Stellar Endpoint public-report gap review.",
+  "id": "endpoint-message-library-low-harvest-checklist",
+  "related_pattern_ids": [
+    "cross-domain-balance-location-mismatch-pattern",
+    "soroban-storage-ttl-rent-dos-pattern"
+  ],
+  "tags": [
+    "rust-soroban",
+    "endpoint",
+    "message-library",
+    "fee-accounting",
+    "codec",
+    "checklist",
+    "post-hm-harvest"
+  ],
+  "test_ideas": [
+    "Construct residual balance before send and assert exact call-local fee/refund accounting.",
+    "Instantiate blocked libraries and assert advertised capability flags match failing/succeeding entrypoints.",
+    "Round-trip account and contract Address variants through payload encoding.",
+    "Run one fuzz/table test for duplicate DVN/admin/worker Vec entries and zero-length vectors."
+  ],
+  "trust_boundaries": [
+    "Endpoint contract raw native balance vs per-call fee funding.",
+    "OApp-selected library config vs endpoint default library config.",
+    "Worker/DVN/admin controlled paths vs permissionless send/receive paths.",
+    "Soroban Address account/contract variants vs cross-chain byte payloads."
+  ]
+}

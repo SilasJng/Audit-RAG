@@ -37,6 +37,7 @@ PROMOTION_TARGETS = {
     "component_checklist": "component_checklists",
     "validation_recipe": "validation_recipes",
     "false_positive_case": "false_positive_cases",
+    "low_non_critical_case": "low_non_critical_cases",
     "contest_note": "contest_notes",
 }
 
@@ -275,6 +276,7 @@ def _schema_for_record_type(record_type: str) -> Path | None:
         "component_checklist": "component_checklist.schema.json",
         "validation_recipe": "validation_recipe.schema.json",
         "false_positive_case": "false_positive_case.schema.json",
+        "low_non_critical_case": "low_non_critical_case.schema.json",
         "contest_note": "contest_note.schema.json",
     }
     name = schema_names.get(record_type)

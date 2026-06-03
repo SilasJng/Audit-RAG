@@ -1,0 +1,39 @@
+{
+  "affected_functions": [
+    "BlockedMessageLib interface/capability reporting"
+  ],
+  "classification": "low",
+  "component_types": [
+    "message-library",
+    "interface-advertising"
+  ],
+  "id": "c4-2026-04-layerzero-stellar-endpoint-low-blocked-message-lib-interface",
+  "issue_title": "BlockedMessageLib advertises a bidirectional interface while intentionally blocking one side",
+  "language": "rust-soroban",
+  "operational_risk": "OApps or operators may configure a library believing both directions are supported and later hit blocked receive behavior.",
+  "project_repo": "https://github.com/code-423n4/2026-04-layerzero",
+  "protocol_name": "LayerZero Stellar Endpoint",
+  "recommended_mitigation": [
+    "Expose narrower capability flags for intentionally blocked libraries.",
+    "Add regression tests asserting advertised interface support matches implemented callable behavior."
+  ],
+  "retrieval_channel": "low_non_critical_caution",
+  "root_cause": "Capability/interface metadata is not aligned with the library implementation semantics.",
+  "source_name": "Code4rena 2026-04 LayerZero Stellar Endpoint final report",
+  "source_report_section": "Low / non-critical findings: BlockedMessageLib advertises send-and-receive interface without receive implementation",
+  "source_type": "code4rena-final-report",
+  "source_url": "https://code4rena.com/reports/2026-04-layerzero-stellar-endpoint",
+  "summary": "A blocked/default message library can report capabilities that imply send and receive support even though the receive side is intentionally unavailable. This is an integration and configuration-footgun finding rather than direct fund loss.",
+  "tags": [
+    "rust-soroban",
+    "message-library",
+    "interface-mismatch",
+    "capability-advertising",
+    "integration-footgun"
+  ],
+  "when_it_could_escalate": [
+    "A router or endpoint trusts the advertised capability as an authorization gate and then executes an unintended code path.",
+    "Misadvertised receive support can permanently strand messages or funds in a permissionless way."
+  ],
+  "why_not_medium_or_high": "The mismatch can mislead integrators or operators, but by itself does not show an unauthorized message execution, fund loss, or durable protocol insolvency path."
+}

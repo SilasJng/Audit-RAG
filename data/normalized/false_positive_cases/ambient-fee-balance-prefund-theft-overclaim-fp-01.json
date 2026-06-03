@@ -1,0 +1,22 @@
+{
+  "classification": "downgraded-to-low-or-qa",
+  "downgrade_reason": "Impact framing depends on external integration assumptions rather than a protocol-enforced victim balance invariant.",
+  "id": "ambient-fee-balance-prefund-theft-overclaim-fp-01",
+  "issue_claim": "A later sender can steal a previous user’s prefunded endpoint fee because fee payment uses the endpoint raw balance.",
+  "source_url": "https://code4rena.com/reports/2026-04-layerzero-stellar-endpoint",
+  "tags": [
+    "fee-accounting",
+    "raw-balance",
+    "residual-balance",
+    "severity-calibration",
+    "prefunding"
+  ],
+  "trust_assumption": "Users or integrations do not rely on the endpoint raw native balance as a protected per-user escrow unless the protocol explicitly promises that behavior.",
+  "when_it_could_be_real": [
+    "Documentation or code exposes per-user fee deposits whose ownership must be preserved.",
+    "An attacker can force a failed victim flow that leaves meaningful balance and then permissionlessly consume or refund it.",
+    "The amount is not dust and the loss is repeatable across normal user operations."
+  ],
+  "why_it_looked_bad": "A PoC can often show residual native balance being consumed or refunded in a later send flow, which resembles victim-funded fee theft.",
+  "why_not_valid": "Without a documented or enforced per-user prefunding escrow invariant, residual raw balance is usually treated as accidental donation, dust, or failed-call leftover. The stronger theft claim needs evidence that a victim is expected to prefund meaningful value and that another actor can deterministically capture that value."
+}

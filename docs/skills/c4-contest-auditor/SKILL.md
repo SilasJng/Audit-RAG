@@ -1,6 +1,6 @@
 ---
 name: c4-contest-auditor
-description: Audit Code4rena contest repositories from a C4 audit URL, including Solidity and Rust/Soroban targets. Extract intake data, lock in in-scope files, suppress known findings and out-of-scope issues, bootstrap a local audit workspace, and package only novel in-scope findings.
+description: Audit competitive security contest repositories from Code4rena or similar contest pages such as Immunefi audit competitions. Extract intake data, lock in in-scope files, suppress known findings and out-of-scope issues, bootstrap a local audit workspace, and package only novel in-scope findings.
 version: 1.0.0
 author: Hermes Agent
 license: MIT
@@ -10,20 +10,24 @@ metadata:
     related_skills: [github-repo-management]
 ---
 
-# C4 Contest Auditor
+# C4 / Contest Auditor
 
-Use this skill when auditing a Code4rena contest from its C4 audit URL or from a manually copied contest page snapshot.
+Use this skill when auditing a Code4rena contest from its C4 audit URL or from a manually copied contest page snapshot. Also use it for similar competitive audit workflows such as Immunefi audit competitions, where the same scope-first / known-issue-suppression / PoC-gated workflow applies even if the platform is not Code4rena.
 
 ## Goal
 
-Turn a C4 contest page into a scope-locked local audit workspace, then audit only the in-scope files while suppressing known findings, prior-review artifacts, and out-of-scope issues.
+Turn a contest page into a scope-locked local audit workspace, then audit only the in-scope files while suppressing known findings, prior-review artifacts, and out-of-scope issues.
 
 ## When to use
 
 - The user gives a `code4rena.com/audits/...` URL
-- The user wants to bootstrap a local smart-contract audit workspace
+- The user gives a published `code4rena.com/reports/...` URL and wants a security report breakdown, video script, or educational writeup based on rewarded findings
+- The user gives an `immunefi.com/audit-competition/...` URL
+- The user wants to bootstrap a local smart-contract, validator, protocol, or infrastructure audit workspace
 - The user wants help filtering known findings and keeping only novel issues
-- The target is a Solidity/Vyper/Yul or Rust/Soroban contest repository
+- The target is a Solidity/Vyper/Yul, Rust/Soroban, C/C++, or other security-contest repository
+
+For published report breakdowns, stay in analysis/education mode: cache the public report, extract each HM finding's root-cause links and core exploit path, preserve fixed GitHub blob links, and avoid generating active contest submission artifacts unless the user explicitly asks for them.
 
 ## Core rules
 
@@ -40,6 +44,8 @@ Turn a C4 contest page into a scope-locked local audit workspace, then audit onl
 Before scoring findings, identify the contest language/runtime from the repo and README. This skill supports Solidity/Vyper/Yul and Rust/Soroban C4 repos.
 
 ### 1. Intake extraction
+
+For Code4rena pages, use the bundled C4 intake scripts.
 
 Preferred path:
 
@@ -62,6 +68,13 @@ Read from `intake.json` before auditing:
 - `requires_join`
 
 If the C4 page is join-gated or the extracted scope is obviously partial, do not stop at the empty page or trust the partial `intake.json`. Probe the contest repository README and any linked `scope.txt` / `out_of_scope.txt` artifacts to recover machine-readable scope. When a local repo already contains `scope.txt` / `out_of_scope.txt`, prefer generating a corrected local intake (for example `intake.local.json`) from those files before running `start_audit.py`, and include public-known issues / V12 runs as known findings. For Rust/Soroban contests, extract `.rs` in-scope paths the same way Solidity contests extract `.sol` paths.
+
+For Immunefi audit competitions or other non-C4 contest pages, perform a manual intake instead of forcing the C4 scripts:
+- Fetch and cache every relevant contest tab/page (`information`, `scope`, `resources`) as both raw HTML and extracted text under `audit-context/<slug>/`.
+- Extract the asset scope, out-of-scope rules, impact/severity table, PoC requirements, attacker model, reference configuration, repository URL, review branch/tag, start/end dates, compiler/runtime constraints, duplicate policy, and public/private known-issue policy.
+- If the page links GitHub known-issue trackers, fetch each issue through the GitHub API, save raw JSON/Markdown under `audit-context/<slug>/known-issues/`, and build `known-finding-signatures.txt` from issue titles plus body bullets/checklist items.
+- For an existing local repo, lock the exact branch and commit with `git branch --show-current` and `git rev-parse HEAD`, and write `audit-context/<slug>/audit-context.json`, `in-scope-files.txt`, `out-of-scope.txt`, and `audit-notes.md` manually if no platform-specific intake script exists.
+- Keep platform-specific rules intact. Example: Immunefi may require a runnable PoC for all severities and may treat duplicates/fixes differently from C4; record those as quality gates before auditing.
 
 ### 2. Audit bootstrap
 
@@ -123,11 +136,21 @@ Prioritize:
 
 If the repo is Rust-based and `cargo` is available, run the project's documented test command locally before finalizing claims. Use tests to distinguish intended behavior from exploitable behavior, and add temporary local tests only for validation — remove them after confirming the behavior.
 
+For C/C++ validator or infrastructure contests:
+- Read the contest page and repository docs for the supported OS, compiler, and build toolchain before treating local build failures as protocol facts.
+- If the local host cannot build the target (for example macOS GNU Make 3.81 failing on a GNUmakefile that requires newer GNU Make, while the contest only accepts Linux/GCC behavior), record the baseline blocker in `audit-context/<slug>/audit-notes.md` and continue with scope locking, known-issue extraction, static indexing, and manual review. Final PoC validation must move to the contest-supported environment.
+- For first-pass hotspot indexing, scan only in-scope production source paths and exclude obvious `test`, `tests`, `fuzz`, `bench`, development-tool, and out-of-scope directories. Record counts and weighted hotspots under `audit-context/<slug>/static-hotspots.md` / `.json`.
+- Prioritize remotely reachable parser/server/packet paths first when the attacker model is remote-only; then move to consensus/replay/state-lifetime surfaces and persistence/snapshot loaders.
+- Treat historical audit-rag matches from other runtimes as navigation only. For new runtimes such as C/C++ Solana validators, current-code reachability, known-issue suppression, impact reproduction, and platform-specific PoC requirements dominate retrieved severity or similarity.
+
 ### 5. Output policy
 
 Always create in the target repository:
 - `<repo>/findings/`
 - `<repo>/finds/QA-report.md`
+- `<repo>/submissions/`
+
+For non-C4 contests, also create `audit-context/<slug>/next-pass-plan.md` after bootstrap. The plan should preserve fixed defaults, attacker model, quality gates, suppression sources, first workstreams, and validation blockers so later sessions can resume without rereading the entire contest page.
 
 Policy:
 - Active High/Medium findings: one markdown file per issue under `<repo>/findings/`
@@ -243,6 +266,14 @@ When evaluating a candidate finding for Code4rena submission:
 12. If local review dries up, run an external-reference sweep instead of only rereading the same code: search audit-rag and public reports for adjacent protocols/runtimes, extract reusable invariants, then map them back to exact local entrypoints. For Rust/Soroban lending contests, especially compare alternate value-moving entrypoints against normal operation guards: pool/reserve status (`paused`, `frozen`, `active`), whitelist/blacklist checks, interest/reward index updates, and settlement verification. A strong external analogy is only a lead; require a local PoC and a narrow duplicate check against V12/known. If the root cause is adjacent but not identical to a known item (for example global pause missing in flash loans versus reserve-local frozen status missing in flash loans), keep it as `ACTIVE-CANDIDATE` with an explicit adversarial duplicate-review note rather than immediately suppressing or submitting.
 13. For split-phase flows such as `prepare`/`execute`, `commit`/`settle`, or `authorize`/`consume`, audit every state assumption captured at phase 1 against current state at phase 2. If phase 1 checks lifecycle/emergency controls (`paused`, `frozen`, `active`, whitelist/blacklist, price tolerance, health factor), verify which controls phase 2 revalidates after refetching state. A strong candidate can exist when phase 2 correctly rechecks one dimension (for example health factor or global pause) but misses a different reserve-local lifecycle flag. When reporting, frame only the dimension proven by PoC: if the test proves collateral-reserve pause after authorization, do not claim debt-reserve pause, inactive-state bypass, or healthy-account liquidation unless separate tests prove them.
 14. For swap/slippage findings involving protocol fees, distinguish gross DEX output from net amount credited to the user. If `min_amount_out` is checked before deducting a bounded protocol fee and final solvency/health checks still run, default to QA/Low unless the PoC proves attacker-capturable value, direct protocol loss, or a downstream invariant break. Keep the validated PoC and rationale in `finds/QA-report.md` rather than forcing it into an HM submission.
+15. When a live Rust/Soroban lending audit dries up and the user asks for colder surfaces, run a cold-surface sweep rather than revisiting hot known families. Useful buckets include token/aToken allowance TTL versus declared expiration, public state-mutating helpers that look like views or cache warmers, treasury/admin-only accounting, interest-rate strategy parameter validation, independent helper/engine history growth, and reserve/accounting drift. Suppress early if the impact is only approval expiry/integrator inconvenience, cache-warming fee grief, or trusted-admin configuration; failed Soroban invocations roll back storage writes, so “clear cache then revert” theories need proof that eviction persists before treating them as DoS. Record the sweep under `audit-context/<slug>/...` and audit-rag even when all leads are duplicate/false-positive so future sessions do not re-promote the same cold leads.
+16. For a narrow lending-accounting sweep, separate authoritative accounting inputs from helper/cache inputs before writing a PoC. In account-data calculators, identify what enumerates real user positions (for example config bitmaps, reserve-id lookup, scaled token balances) versus what only batches prices/reserves or returns caches (for example `extra_assets`, `known_prices`, `known_reserves`, `known_balances`, `balance_cache`). Do not promote an “injected asset”, duplicated asset, or stale cache theory unless the loop that sums collateral/debt actually consumes attacker-controlled entries or persists the stale cache across a security boundary. For reserve-deficit and public-update helpers, run the duplicate check early against known false-invariant and public-accrual-cadence families; if the root cause is already a known TTL/default-zero state loss, false `total_borrow <= total_supply` invariant, or public index-update cadence issue, mark it duplicate and move on rather than spending time on a redundant PoC.
+17. When the user asks to continue an active contest audit using newly ingested audit-rag material, treat it as an external-case-to-local-code mapping pass, not another ingestion pass. Read the contest provisional synthesis/checklist/triage first, map each historical vulnerability family to exact in-scope entrypoints, run `suppress-check` early for duplicate-looking leads, and record even suppressed non-trivial leads with `update-lead`. Write a short active-repo note under `audit-context/<slug>/` with fixed commit permalinks, observed local code paths, suppression/duplicate reasons, and the next search direction. If only audit-rag provisional state changed, commit/push only `/Users/qwe/Audit/audit-rag`; do not commit active contest repo changes unless the user explicitly asks.
+18. For Rust/Soroban lending audits that use user-position bitmaps or active-reserve caps, audit every entrypoint that can set or clear collateral/borrow membership bits, not just ordinary supply/borrow/transfer paths. Compare each alternate flow (swap collateral, liquidation receive-aToken, helper callbacks, token transfer finalizers) against the canonical `MAX_USER_RESERVES` / `count_active_reserves()` guard. If one path can add a new reserve without the cap check, record it as a lead, but do not promote it to HM unless a PoC proves non-self or protocol-level impact such as liquidation blocking, safety-check bypass, or accounting DoS. If the result is only a user self-fragmenting their own account or is adjacent to a known dust/slot-filling family, keep it as QA/Low or suppress after duplicate review.
+19. When audit-rag `triage-lead` returns high-severity generic matches but `suppress-check` returns `suppress-or-duplicate-review`, trust the suppression/local-code evidence over the retrieved severity. Reset the lead's severity/blocker with `update-lead` if needed, explicitly noting that historical RAG matches are navigation rather than proof. For active-contest direction checks, write a repo-local note that ranks the mapped external families by local reachability and duplicate risk; for Rust/Soroban lending this often means prioritizing hook/callback transitional-state and stale-solvency/config-transfer sweeps, then oracle cache/config sanity, then require_auth matrix, while suppressing generic TTL/default-zero or self-fragmentation reserve-cap theories unless a distinct PoC proves protocol impact.
+20. For hook/callback transitional-state sweeps in Rust/Soroban lending protocols, build a call-order table before writing a PoC. Track exactly when funds leave, when callbacks/custom handlers run, whether a protocol-wide reentrancy guard is still held, which callback-style entrypoints intentionally bypass that guard, and whether post-callback checks re-read authoritative state or consume temporary snapshots. If the only reachable mutation is through an authenticated token callback/finalizer that syncs bitmaps or if callback state only suggests user self-grief/stale membership, record a suppressed lead instead of promoting it. Revive only when a PoC proves a non-duplicate protocol-level effect such as bad debt, unauthorized collateral release, liquidation bypass/DoS, or stale-snapshot accounting loss after an external handler mutates checked state.
+21. When continuing an active C4 audit after context compression or a dry spell, treat the next pass as a bounded hypothesis-family sweep, not an open-ended reread. Restore repo/audit-rag state first, then split the hypothesis into parallel workstreams when possible (for example lifecycle/state checks, bitmap/rounding, and oracle/cache/config). Require each workstream to return exact file:line evidence, duplicate-risk mapping to `known-finding-signatures.txt`, and PoC feasibility. If the family yields only duplicate-adjacent or weak leads, preserve the negative result in `audit-context/<slug>/...md`, update audit-rag with the strongest lead/blocker, export the contest summary, and pivot to a colder surface instead of repeatedly revisiting the same known family.
+22. When the user says they are ready to submit part of an active contest, switch from discovery mode to a submission-readiness pass before digging further. Read the repo-local handoff/status notes, existing `findings/`, `finds/`, and `submissions/` files, then rank candidates into: submit now, submit with duplicate-risk caveats, QA/Low only, and suppressed duplicate. Re-run the focused PoC commands for each proposed HM candidate using the contest-required toolchain, capture the pass/fail summary, and remove any generated snapshot/artifact files before final status. For every candidate, restate the narrow claim, direct GitHub root-cause links, duplicate-risk mapping to `known-finding-signatures.txt`, and wording to avoid. Do not promote newly discovered behavior during this pass if it is covered by known signatures (for example dust/rounding/initializer families); record it as duplicate/QA and keep the user-facing answer focused on what is safe to submit.
 
 ## Submission style learned from rewarded C4 reports
 
@@ -278,6 +309,8 @@ For each confirmed High/Medium finding, produce two user-review artifacts in add
 
 - A stronger version of a fee-accounting issue may exist even when a weaker "stray balance refund" variant is only QA/Low; check whether the same root cause can steal funds from the protocol's intended prefund flow.
 - TTL-based replay or expiry theories in Soroban should not be treated as submission-ready until the expiry behavior is reproduced or otherwise nailed down with much stronger evidence.
+- After HM discovery dries up, run a separate QA/Low harvest pass instead of ending at "no more submission-ready HM". The LayerZero Stellar final report had 0 HM and highlighted Low/NC issues, so an HM-only search missed most report value. For Rust/Soroban endpoint-style repos, explicitly sweep: raw balance/refund plus recover skim paths, blocked/stub library interface mismatches, persistent-key TTL/archive/restore friction, sentinel payload hashes, admin/signer rotation caps, upgrade timelocks, account-vs-contract address variants, default config inheritance, worker quote-vs-assign consistency, tagless address codec assumptions, alert/event spam, register-library probes, zero amount/empty vector/short TTL edge cases, unchecked u32/i128 math, and custom/default library cutover windows.
+- Record weak or QA-looking leads in audit-rag with `add-lead` and `suppress-check` even when they are not HM candidates. A postmortem found `lead_count=0` for the LayerZero Stellar contest, making it hard to distinguish "reviewed and rejected" from "never checked".
 
 
 ## Rust/Soroban contest notes
@@ -342,6 +375,7 @@ Monetrix PoC/report packaging lessons:
 - For Hyperliquid documentation, prefer fetching GitBook pages with the `.md` suffix or `?format=markdown` and save them under `audit-context/<slug>/`. Use the page's `?ask=<question>` helper only for targeted clarification, and cite the canonical docs URL in the submission rather than the local cache.
 - For CoreWriter/asynchronous-action findings, support the claim with both official docs and local code: docs should establish that CoreWriter emits a log processed later by HyperCore and that CoreWriter actions are processed after the EVM block; local code should establish the exact action encoding and the protocol's premature state mutation.
 - Before finalizing a submission markdown, run a quick QA pass that checks: required C4 sections exist, `Links to root cause` uses only direct root-cause GitHub line links on the default branch unless the user requests pinned links, no speculative wording such as `may/might/could/possibly/probably/likely` remains in validated claims, and the `## Proof of Concept` section has no `Latest local result` block unless explicitly requested.
+- Postmortem lesson from final Monetrix report: PM/Borrow-Lend 0x811 review must decode the full upstream schema, not just test strict reads or bridge availability. When `suppliedBalance()`/external strategy readers feed `totalBackingSigned()` or settlement gates, explicitly classify fields as asset/liability/held/metadata and test net external equity: gross supplied assets must be offset by borrow liabilities before `surplus()`/`distributableSurplus()` can gate yield. Treat this as a contract-side safety-oracle bug, not Operator misoperation, when normal settlement can pass because a gate omits liabilities.
 - Before handing artifacts to the user or a webpage AI reviewer, run a source-hygiene pass:
   - final `submissions/` HM reports contain no `/Users/qwe` local paths
   - final `submissions/` HM reports contain no `V12/public-known check` section

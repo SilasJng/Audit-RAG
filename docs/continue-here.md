@@ -65,9 +65,10 @@
 4. PoC、duplicate review 或最终判断后运行 `update-lead`，让 ledger 成为 active lead 的唯一状态源
 5. 跨会话或阶段复盘时运行 `export-contest-summary`，生成 `contest-summary.md`
 6. 维护 `validate-data`、`pytest` 和 retrieval eval 回归，避免正式数据可用性退化
-7. 审计中产生的新知识先写入 `data/provisional/contests/<contest-slug>/`，不要直接污染正式 RAG
+7. 审计中产生的新知识先写入 `data/provisional/contests/<contest-slug>/`，不要直接污染正式 RAG；公开报告后确认有复盘价值的 Low/NC/QA 可少量归档到 `low_non_critical_cases` caution 通道
 8. 等最终报告/提交结果确认后，先 dry-run `promote-provisional`，人工审校后再 `--confirmed` 归档到 `data/normalized/` 和正式 eval
 9. 扩展更细的 component checklist / recipe；向量检索和重排模型仍然后置
+10. 对 endpoint / message-library / Rust/Soroban 项目，参考 `docs/layerzero-stellar-postmortem-workflow.md`，HM 搜索结束后必须独立跑 QA/Low harvest
 
 ## 当前仓库里最重要的文档
 

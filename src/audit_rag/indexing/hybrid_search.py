@@ -20,6 +20,7 @@ DOCUMENT_SETS = {
     "component_checklist": _NORMALIZED_DIR / "component_checklists",
     "validation_recipe": _NORMALIZED_DIR / "validation_recipes",
     "false_positive_case": _NORMALIZED_DIR / "false_positive_cases",
+    "low_non_critical_case": _NORMALIZED_DIR / "low_non_critical_cases",
 }
 
 
@@ -304,6 +305,19 @@ def _project_match(data: dict[str, Any], score: float, matched_terms: list[str])
                 "downgrade_reason": data.get("downgrade_reason"),
             }
         )
+    elif doc_type == "low_non_critical_case":
+        item.update(
+            {
+                "title": data.get("issue_title"),
+                "classification": data.get("classification"),
+                "protocol_name": data.get("protocol_name"),
+                "root_cause": data.get("root_cause"),
+                "summary": data.get("summary"),
+                "why_not_medium_or_high": data.get("why_not_medium_or_high"),
+                "operational_risk": data.get("operational_risk"),
+                "affected_functions": data.get("affected_functions", []),
+            }
+        )
     elif doc_type == "vulnerability_pattern":
         item.update(
             {
@@ -363,7 +377,12 @@ def hybrid_search(query: str, context: QueryContext | None = None) -> dict[str, 
         limit=_positive_limit(),
     )
     caution_matches = (
-        _rank(query, runtime, ["false_positive_case"], limit=_caution_limit())
+        _rank(
+            query,
+            runtime,
+            ["false_positive_case", "low_non_critical_case"],
+            limit=_caution_limit(),
+        )
         if runtime.require_false_positive_check
         else []
     )
